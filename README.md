@@ -134,6 +134,15 @@ Measure it before enabling it.
 > everything else in the stack is fine on 3.14, but `pip install mediapipe`
 > will simply fail to resolve.
 
+> **Keep the checkout on an ASCII-only path.** On Windows MediaPipe resolves its
+> graph assets (`holistic_landmark_cpu.binarypb`) through a C++ layer that
+> mangles non-ASCII characters in the path. This project started life in a
+> directory called `Yapay Zeka İşaret Dili Tercümanı`, and every `Holistic()`
+> construction died with a `FileNotFoundError` quoting a corrupted path —
+> nothing in the message points at the folder name. That is why the directory is
+> called `signa`. Do not rename it back to anything with Turkish characters,
+> however much more descriptive that would be.
+
 ```bash
 py -3.12 -m venv .venv
 .venv\Scripts\activate
@@ -164,8 +173,14 @@ python -m signa.extract --videos data/raw --dry-run
 Extract landmarks and write the manifest:
 
 ```bash
-python -m signa.extract --videos data/raw --out data/landmarks
+python -m signa.extract --videos data/raw --out data/landmarks --stride 2 --workers 12
 ```
+
+`--stride 2` keeps every second frame, which turns a 60 fps source into the
+30 fps the other datasets use — a model should not have to relearn tempo per
+corpus — and halves the work. `--workers` runs one MediaPipe graph per process;
+at 1080p this is the difference between six hours and fifteen minutes. Extraction
+resumes: clips already on disk are skipped, so an interrupted run costs nothing.
 
 Train and evaluate signer-independently:
 

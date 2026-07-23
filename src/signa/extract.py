@@ -28,6 +28,29 @@ from .dataset import Clip, write_manifest
 
 VIDEO_SUFFIXES = {".mp4", ".avi", ".mov", ".mkv", ".webm"}
 
+# One Holistic graph per worker process. MediaPipe's graph is expensive to
+# build and cannot be shared across processes, so each worker builds one on
+# first use and keeps it for the rest of its life.
+_WORKER: dict = {}
+
+
+def _init_worker(complexity: int) -> None:
+    from .landmarks import Extractor
+
+    _WORKER["extractor"] = Extractor(complexity=complexity)
+
+
+def _extract_one(job: tuple[str, str, int]) -> tuple[str, int]:
+    """(video path, destination, stride) -> (destination, frames written)."""
+    source, destination, stride = job
+    sequence = _WORKER["extractor"].video(source, stride=stride)
+    if len(sequence) == 0:
+        return destination, 0
+    target = Path(destination)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    np.save(target, sequence)
+    return destination, len(sequence)
+
 
 def find_videos(root: Path) -> list[Path]:
     return sorted(p for p in root.rglob("*") if p.suffix.lower() in VIDEO_SUFFIXES)
@@ -51,6 +74,22 @@ def parse_by_pattern(video: Path, pattern: re.Pattern) -> tuple[str, str, str] |
     return groups["gloss"], groups["signer"], groups.get("repeat") or video.stem
 
 
+def _run(jobs, workers: int, complexity: int):
+    """Yield (destination, frames) per job, serial or across processes."""
+    if workers <= 1:
+        _init_worker(complexity)
+        for job in jobs:
+            yield _extract_one(job)
+        return
+
+    from concurrent.futures import ProcessPoolExecutor
+
+    with ProcessPoolExecutor(
+        max_workers=workers, initializer=_init_worker, initargs=(complexity,)
+    ) as pool:
+        yield from pool.map(_extract_one, jobs, chunksize=4)
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -62,6 +101,11 @@ def main(argv=None) -> int:
                         help=r"e.g. '(?P<signer>User_\d+)_(?P<gloss>\w+?)_(?P<repeat>\d+)'")
     parser.add_argument("--complexity", type=int, default=1, choices=[0, 1, 2],
                         help="MediaPipe pose model complexity; 2 is slower and more accurate")
+    parser.add_argument("--stride", type=int, default=1,
+                        help="keep every nth frame; use 2 on 60 fps sources to match "
+                             "the 30 fps datasets")
+    parser.add_argument("--workers", type=int, default=1,
+                        help="parallel MediaPipe processes; each builds its own graph")
     parser.add_argument("--limit", type=int, default=None, help="stop after N clips")
     parser.add_argument("--dry-run", action="store_true",
                         help="print the parsed (gloss, signer) pairs and exit")
@@ -104,31 +148,34 @@ def main(argv=None) -> int:
         print(f"warning: {skipped} clips were skipped -- check --layout/--pattern",
               file=sys.stderr)
 
-    from .landmarks import Extractor  # imported late so --dry-run needs no mediapipe
-
     args.out.mkdir(parents=True, exist_ok=True)
     clips: list[Clip] = []
     empty: list[str] = []
+    jobs: list[tuple[str, str, int]] = []
 
-    with Extractor(complexity=args.complexity) as extractor:
-        for index, (video, gloss, signer, repeat) in enumerate(parsed, start=1):
-            relative = Path(signer) / gloss / f"{video.stem}.npy"
-            destination = args.out / relative
-            if destination.exists() and not args.overwrite:
-                clips.append(Clip(str(relative).replace("\\", "/"), gloss, signer, repeat))
-                continue
+    for video, gloss, signer, repeat in parsed:
+        relative = Path(signer) / gloss / f"{video.stem}.npy"
+        destination = args.out / relative
+        entry = Clip(str(relative).replace("\\", "/"), gloss, signer, repeat)
+        if destination.exists() and not args.overwrite:
+            clips.append(entry)  # resume: already extracted
+            continue
+        jobs.append((str(video), str(destination), args.stride))
+        clips.append(entry)
 
-            sequence = extractor.video(video)
-            if len(sequence) == 0:
-                empty.append(video.name)
-                continue
+    if jobs:
+        print(f"extracting {len(jobs)} clips with {args.workers} worker(s), stride {args.stride}")
+        done = 0
+        for destination, frames in _run(jobs, args.workers, args.complexity):
+            done += 1
+            if frames == 0:
+                empty.append(Path(destination).name)
+            if done % 100 == 0 or done == len(jobs):
+                print(f"  {done}/{len(jobs)}", flush=True)
 
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            np.save(destination, sequence)
-            clips.append(Clip(str(relative).replace("\\", "/"), gloss, signer, repeat))
-
-            if index % 25 == 0 or index == len(parsed):
-                print(f"  {index}/{len(parsed)}", flush=True)
+    # A clip MediaPipe found nothing in has no file, so it must not be listed.
+    missing = {Path(name).stem for name in empty}
+    clips = [c for c in clips if Path(c.path).stem not in missing]
 
     write_manifest(args.manifest, clips)
     print(f"wrote {len(clips)} landmark files and {args.manifest}")

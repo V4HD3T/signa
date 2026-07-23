@@ -84,13 +84,24 @@ class Extractor:
         rgb.flags.writeable = False
         return frame_from_results(self._holistic.process(rgb))
 
-    def video(self, path: str | Path) -> np.ndarray:
-        """Process a whole clip. Returns (T, FRAME_DIM); T may be 0."""
+    def video(self, path: str | Path, stride: int = 1) -> np.ndarray:
+        """Process a whole clip. Returns (T, FRAME_DIM); T may be 0.
+
+        `stride` keeps every nth frame. Its real use is normalising frame rate
+        across sources -- LSA64 is 60 fps where AUTSL and BosphorusSign22k are
+        30, and a model trained on one tempo should not have to relearn the
+        other. Halving the frames also halves extraction time, which at 1080p
+        is the difference between an afternoon and a coffee break.
+        """
         import cv2
 
         capture = cv2.VideoCapture(str(path))
         try:
-            frames = [self.frame(image) for image in _read(capture)]
+            frames = [
+                self.frame(image)
+                for index, image in enumerate(_read(capture))
+                if index % stride == 0
+            ]
         finally:
             capture.release()
         if not frames:
