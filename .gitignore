@@ -1,0 +1,25 @@
+# Data and model artefacts. The dataset is licensed per-researcher under an
+# EULA -- clips and extracted landmarks must never be committed or forwarded.
+data/
+runs/
+*.pt
+*.npy
+*.mp4
+*.avi
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

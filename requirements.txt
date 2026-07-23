@@ -1,0 +1,16 @@
+# Python 3.11 or 3.12 -- mediapipe has no wheel for 3.13+.
+#
+# mediapipe is pinned rather than floated: `mp.solutions.holistic` is the
+# legacy Solutions API, deprecated upstream in favour of the Tasks API. It is
+# still the one graph that returns hands and pose together in a single pass,
+# which is what keeps extraction near real-time. 0.10.14 is a version where it
+# is known to be present.
+mediapipe==0.10.14
+opencv-python>=4.9,<5
+numpy>=1.26,<2
+
+torch>=2.2
+# torch on Windows without CUDA is the default wheel; for a GPU build see
+# https://pytorch.org/get-started/locally/
+
+pytest>=8.0

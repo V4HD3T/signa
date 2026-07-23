@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "signa"
+version = "0.0.1"
+description = "Isolated Turkish Sign Language (TID) word recognition from webcam landmarks"
+readme = "README.md"
+license = { file = "LICENSE" }
+# MediaPipe publishes wheels for 3.9-3.12 only. 3.13+ has no wheel at the time
+# of writing, so the venv for this project must be 3.11 or 3.12 even if a newer
+# interpreter is the system default.
+requires-python = ">=3.10,<3.13"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "."]
+addopts = "-q"
