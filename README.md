@@ -22,25 +22,47 @@ adjacent signs, and mapping sign order onto Turkish grammar — it remains an
 open research problem, not a graduation project. Signa recognises *words*, one
 at a time, and says so everywhere it reports a number.
 
+## Data
+
+Primary dataset is **AUTSL** (Ankara University): 226 signs, 43 signers, 38,336
+clips, with an official signer-independent split of 31 / 6 / 6 signers. Full
+reasoning, access steps and the two secondary datasets are in
+[`docs/dataset-access.md`](docs/dataset-access.md).
+
+The short version: 43 signers is the reason. Signer-independent generalisation is
+the whole difficulty of this problem and it is learned from signer diversity —
+31 training signers teach a model what is invariant across people in a way that
+four cannot.
+
 ## Honest accuracy expectations
 
-Published figures on BosphorusSign22k vary by an enormous margin, and almost all
+Published figures on these datasets vary by an enormous margin, and almost all
 of the spread is protocol, not modelling. Before quoting any number — in the
-report, in the defence, in this README — check three things about it: **which
-subset** (50 / 174 / 744 glosses), **top-1 or top-5**, and **signer-independent
-or not**.
+report, in the defence, in this README — check three things about it: **how many
+classes**, **top-1 or top-5**, and **signer-independent or not**.
 
-The claim that a plain LSTM reaches ~99% on this dataset does not survive that
-check. It is the shape of a number that is either top-5, or from a split where
-the same signer appears in training and test. A realistic target for a plain
-BiLSTM on landmarks, evaluated signer-independently, is **75–90% top-1** — higher
-at 50 glosses than at 174, since there are fewer classes to confuse. Reported
-results well above that range generally combine multiple cues (hand + face +
-body + optical flow) rather than landmarks alone.
+The claim that a plain LSTM reaches ~99% here does not survive that check. It is
+the shape of a number that is either top-5, or from a split where the same signer
+appears in training and test. A realistic target for a plain BiLSTM on landmarks,
+evaluated signer-independently, is **75–90% top-1** — higher with fewer classes,
+since there is less to confuse. Reported results well above that range generally
+combine multiple cues (hand + face + body + optical flow) rather than landmarks
+alone.
 
-Write down the protocol next to every number this repo produces. "94% top-5,
-174 glosses, signer-independent" is a defensible sentence. "99% accuracy" invites
-one question from the jury — *which split?* — that has no good answer.
+The AUTSL leaderboard makes this concrete and is worth using rather than
+avoiding. The CVPR 2021 ChaLearn challenge winners exceeded 96% — with
+multi-stream ensembles over RGB *and* depth *and* pose *and* optical flow. That
+is not this project's target; it is what this project positions against:
+
+> *the challenge winner reaches 96% with a four-stream ensemble over RGB and
+> depth; this reaches X% from hand and pose landmarks alone, running live on a
+> webcam at 30 fps*
+
+That is a better result than a bigger number, because it is true and because it
+explains its own gap. Write the protocol down next to every number this repo
+produces. "94% top-5, 226 classes, signer-independent" is a defensible sentence.
+"99% accuracy" invites one question from the jury — *which split?* — that has no
+good answer.
 
 `train.py` reports top-1 and top-5 on a held-out signer, and writes the protocol
 into `summary.json` alongside them, so the number and its caveats cannot drift
@@ -79,24 +101,31 @@ changed without re-running MediaPipe over 20k videos.
 
 ## Evaluation protocol
 
-Three-way signer split, following the dataset authors' own recommendation:
+Three-way signer split. On AUTSL this is the benchmark's own protocol, passed
+explicitly rather than reinvented:
 
-| Split | Signers | Used for |
+| Split | AUTSL signers | Used for |
 | --- | --- | --- |
-| Train | 4 | fitting |
-| Validation | 1 | early stopping, checkpoint selection |
-| Test | 1 | the reported number, touched once |
+| Train | 31 | fitting |
+| Validation | 6 | early stopping, checkpoint selection |
+| Test | 6 | the reported number, touched once |
 
-The extra validation signer is not ceremony. Selecting a checkpoint on the test
-signer turns the headline into a best-of-N over the test set — the same
-overfitting the signer-independent split exists to prevent, one level up.
+```bash
+python -m signa.train --test-signers <the 6> --val-signers <the 6>
+```
 
-At ~5 repetitions × 4 training signers, a gloss has roughly 20 training clips.
-At that size augmentation is not optional: time warping (±20%), in-plane
-rotation (±8°), scaling (±10%), and coordinate jitter, all in shoulder-width
-units. Mirroring is implemented but off by default — it models a left-handed
-signer, but it also destroys the dominant/non-dominant asymmetry that separates
-some gloss pairs. Measure it before enabling it.
+The validation signers are not ceremony. Selecting a checkpoint on the test
+signers turns the headline into a best-of-N over the test set — the same
+overfitting the signer-independent split exists to prevent, one level up. Left to
+its own devices `train.py` holds out as many validation signers as there are test
+signers, so validation is never noisier than the number it is chasing.
+
+Augmentation — time warping (±20%), in-plane rotation (±8°), scaling (±10%) and
+coordinate jitter, all in shoulder-width units — matters most on the smaller
+datasets, where a gloss may have only ~20 training clips. Mirroring is
+implemented but off by default: it models a left-handed signer, but it also
+destroys the dominant/non-dominant asymmetry that separates some sign pairs.
+Measure it before enabling it.
 
 ## Setup
 
@@ -166,33 +195,36 @@ and is where the interesting failure modes live.
 
 ## Vocabulary choice
 
-Pick the MVP's 50–100 glosses from the dataset's **174-gloss general/daily
-subset**, not at random across all 744. Two reasons: results stay directly
-comparable to published baselines, and the established signer-independent split
-comes for free. `--max-glosses` takes the best-represented glosses, so the
-headline number does not rest on classes with four test clips.
+Start the MVP at 50–100 of AUTSL's 226 signs, then scale to the full 226 once the
+pipeline is honest. `--max-glosses` takes the best-represented classes, so the
+headline number never rests on a class with four test clips. Report the full 226
+alongside the subset — the leaderboard comparison only means anything at 226.
 
 ## Status
 
 - ✅ Frame layout, MediaPipe extraction, normalisation, resampling — 24 tests, no camera or MediaPipe needed to run them
-- ✅ Manifest-backed dataset with a validated signer-independent split
+- ✅ Manifest-backed dataset with a validated signer-independent split, scaling to a benchmark's own protocol
 - ✅ Landmark-space augmentation (time warp, rotation, scale, jitter; mirroring behind a flag)
 - ✅ BiLSTM baseline and Transformer encoder, both verified end to end on synthetic data
 - ✅ Training loop: three-way signer split, early stopping on validation, top-1/top-5 with the protocol recorded in `summary.json`
 - ✅ Self-recording tool and push-to-sign webcam demo
-- ⏳ **Blocked on data:** dataset access (see [`docs/dataset-access.md`](docs/dataset-access.md) — send the EULA request today)
-- ⏳ Real accuracy numbers, a confusion matrix over the MVP vocabulary, and the BiLSTM/Transformer comparison
+- ⏳ **Next:** AUTSL access via CodaLab registration ([`docs/dataset-access.md`](docs/dataset-access.md))
+- ⏳ Real accuracy numbers, a confusion matrix, and the BiLSTM/Transformer comparison
+- ⏳ (Stretch) Cross-dataset generalisation: train on AUTSL, test on BosphorusSign22k
 - ⏳ (Stretch) A thin FastAPI wrapper, so the demo can become a tab in Lingua later
 
 ## Roadmap
 
-1. **Send the EULA request** — the only step with an unbounded, external wait
-2. Meanwhile: record own clips, run the full pipeline on them, fix whatever the exercise breaks
-3. On arrival: `--dry-run`, verify the parse, extract 50–100 glosses from the 174 subset
-4. BiLSTM baseline, signer-independent, with the protocol written down
-5. Augmentation ablation + Transformer comparison — two measured data points beat one asserted one
-6. Push-to-sign demo over the real vocabulary
-7. (Stretch) HTTP boundary, then a Lingua tab
+Ordered so nothing is ever blocked — the slowest gate runs in the background
+while real data is already going through the pipeline.
+
+1. **Register on CodaLab for AUTSL**, and mail the BosphorusSign22k EULA request the same day. The second one is a parallel, unbounded wait that costs one email and unlocks the cross-dataset experiment.
+2. **Today, ungated:** pull LSA64 (direct download) and run extract → train → demo on it. Real multi-signer video, real signer-independent split, this afternoon. Not a reportable result — Argentinian, and the signers wear coloured gloves that MediaPipe was never trained on — but every seam gets exercised on real data.
+3. On AUTSL arrival: `--dry-run`, verify the parse, extract, then train on 50–100 signs with the benchmark's own 31/6/6 split.
+4. BiLSTM baseline at the full 226, signer-independent, protocol written down next to the number.
+5. Augmentation ablation + Transformer comparison — two measured data points beat one asserted one.
+6. Push-to-sign demo over the real vocabulary.
+7. (Stretch) Cross-dataset generalisation, then the HTTP boundary and a Lingua tab.
 
 ## Layout
 

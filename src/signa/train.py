@@ -2,11 +2,17 @@
 
     python -m signa.train --model bilstm --max-glosses 50 --test-signers User_1
 
-Three-way signer split: the test signer is held out end to end, and one *more*
-signer is held out of training as validation. Early stopping and checkpoint
-selection read validation only. Selecting a checkpoint on the test signer would
-quietly turn the headline number into a best-of-N over the test set, which is
-the same overfitting the signer-independent split exists to prevent.
+Three-way signer split: the test signers are held out end to end, and as many
+*more* signers are held out of training as validation. Early stopping and
+checkpoint selection read validation only. Selecting a checkpoint on the test
+signers would quietly turn the headline number into a best-of-N over the test
+set, which is the same overfitting the signer-independent split exists to
+prevent.
+
+For a benchmark that already defines its own split -- AUTSL holds out 6 of 43
+signers -- pass it explicitly rather than letting the defaults invent one:
+
+    python -m signa.train --test-signers signer38 ... --val-signers signer32 ...
 """
 
 from __future__ import annotations
@@ -69,16 +75,17 @@ def evaluate(model: nn.Module, loader: DataLoader, device: str) -> dict[str, flo
     }
 
 
-def pick_val_signer(train_clips: list[Clip], seed: int) -> str:
-    """Hold out the train signer with the *most* clips, so validation is the
+def pick_val_signers(train_clips: list[Clip], count: int = 1) -> tuple[str, ...]:
+    """Hold out the train signers with the *most* clips, so validation is the
     least noisy signal available; deterministic, ties broken by name."""
     counts: dict[str, int] = {}
     for clip in train_clips:
         counts[clip.signer] = counts.get(clip.signer, 0) + 1
-    return sorted(counts, key=lambda signer: (-counts[signer], signer))[0]
+    ordered = sorted(counts, key=lambda signer: (-counts[signer], signer))
+    return tuple(ordered[:count])
 
 
-def run(cfg: Config, val_signer: str | None = None) -> dict:
+def run(cfg: Config, val_signers: tuple[str, ...] | None = None) -> dict:
     seed_everything(cfg.seed)
     device = cfg.resolved_device()
 
@@ -87,13 +94,16 @@ def run(cfg: Config, val_signer: str | None = None) -> dict:
     clips = filter_to(clips, glosses)
 
     train_pool, test_clips = signer_independent_split(clips, cfg.test_signers)
-    val_signer = val_signer or pick_val_signer(train_pool, cfg.seed)
-    train_clips, val_clips = signer_independent_split(train_pool, (val_signer,))
+    # Scale validation with the test set: a benchmark that holds out 6 test
+    # signers (AUTSL) deserves 6 validation signers too, or checkpoint
+    # selection is made on a sample far noisier than the number it is chasing.
+    val_signers = val_signers or pick_val_signers(train_pool, len(cfg.test_signers))
+    train_clips, val_clips = signer_independent_split(train_pool, val_signers)
 
     print(
         f"{len(glosses)} glosses | "
         f"train {len(train_clips)} clips ({len({c.signer for c in train_clips})} signers) | "
-        f"val {len(val_clips)} ({val_signer}) | "
+        f"val {len(val_clips)} ({', '.join(val_signers)}) | "
         f"test {len(test_clips)} ({', '.join(cfg.test_signers)})"
     )
 
@@ -170,7 +180,7 @@ def run(cfg: Config, val_signer: str | None = None) -> dict:
         "model": cfg.model,
         "glosses": len(glosses),
         "train_clips": len(train_clips),
-        "val_signer": val_signer,
+        "val_signers": list(val_signers),
         "test_signers": list(cfg.test_signers),
         "best_val_epoch": best["epoch"],
         "best_val_top1": best["top1"],
@@ -199,8 +209,9 @@ def parse_args(argv=None) -> tuple[Config, str | None]:
     parser.add_argument("--max-glosses", type=int, default=defaults.max_glosses,
                         help="0 or negative means all glosses in the manifest")
     parser.add_argument("--test-signers", nargs="+", default=list(defaults.test_signers))
-    parser.add_argument("--val-signer", default=None,
-                        help="defaults to the train signer with the most clips")
+    parser.add_argument("--val-signers", nargs="+", default=None,
+                        help="defaults to the train signers with the most clips, "
+                             "as many as there are test signers")
     parser.add_argument("--frames", type=int, default=defaults.frames)
     parser.add_argument("--epochs", type=int, default=defaults.epochs)
     parser.add_argument("--batch-size", type=int, default=defaults.batch_size)
@@ -234,9 +245,9 @@ def parse_args(argv=None) -> tuple[Config, str | None]:
         tag=args.tag,
         device=args.device,
     )
-    return cfg, args.val_signer
+    return cfg, tuple(args.val_signers) if args.val_signers else None
 
 
 if __name__ == "__main__":
-    config, validation_signer = parse_args()
-    run(config, validation_signer)
+    config, validation_signers = parse_args()
+    run(config, validation_signers)
