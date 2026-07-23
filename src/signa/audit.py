@@ -22,7 +22,7 @@ from pathlib import Path
 import numpy as np
 
 from . import config as C
-from .dataset import read_manifest
+from .dataset import read_manifest, write_manifest
 
 
 def summarise(values: list[float]) -> str:
@@ -42,6 +42,12 @@ def main(argv=None) -> int:
     parser.add_argument("--landmark-root", type=Path, required=True)
     parser.add_argument("--worst", type=int, default=5,
                         help="how many worst signers/glosses to list")
+    parser.add_argument("--prune", type=Path, default=None,
+                        help="write a manifest with the unusable clips removed")
+    parser.add_argument("--min-detection", type=float, default=0.0,
+                        help="with --prune, drop clips whose either-hand detection rate "
+                             "is at or below this (default 0.0: only clips with no hand "
+                             "in any frame)")
     args = parser.parse_args(argv)
 
     clips = read_manifest(args.manifest)
@@ -57,11 +63,13 @@ def main(argv=None) -> int:
     by_signer: dict[str, list[float]] = defaultdict(list)
     by_gloss: dict[str, list[float]] = defaultdict(list)
     dead: list[str] = []
+    rates: dict[str, float] = {}
 
     for clip in clips:
         sequence = np.load(args.landmark_root / clip.path)
         if len(sequence) == 0:
             dead.append(clip.path)
+            rates[clip.path] = 0.0
             continue
 
         left_rate = float(sequence[:, C.LEFT_PRESENT].mean())
@@ -78,6 +86,7 @@ def main(argv=None) -> int:
         pose.append(pose_rate)
         by_signer[clip.signer].append(either_rate)
         by_gloss[clip.gloss].append(either_rate)
+        rates[clip.path] = either_rate
 
         if either_rate == 0.0:
             dead.append(clip.path)
@@ -101,12 +110,24 @@ def main(argv=None) -> int:
         print(f"  ... and {len(dead) - args.worst} more")
 
     print(f"\nworst {args.worst} signers by either-hand detection")
-    for signer, rates in sorted(by_signer.items(), key=lambda kv: np.mean(kv[1]))[: args.worst]:
-        print(f"  {signer}  {np.mean(rates):.3f}  ({len(rates)} clips)")
+    for signer, values in sorted(by_signer.items(), key=lambda kv: np.mean(kv[1]))[: args.worst]:
+        print(f"  {signer}  {np.mean(values):.3f}  ({len(values)} clips)")
 
     print(f"\nworst {args.worst} glosses by either-hand detection")
-    for gloss, rates in sorted(by_gloss.items(), key=lambda kv: np.mean(kv[1]))[: args.worst]:
-        print(f"  {gloss}  {np.mean(rates):.3f}  ({len(rates)} clips)")
+    for gloss, values in sorted(by_gloss.items(), key=lambda kv: np.mean(kv[1]))[: args.worst]:
+        print(f"  {gloss}  {np.mean(values):.3f}  ({len(values)} clips)")
+
+    if args.prune is not None:
+        kept = [c for c in clips if rates.get(c.path, 0.0) > args.min_detection]
+        dropped = len(clips) - len(kept)
+        write_manifest(args.prune, kept)
+        print(f"\npruned at detection > {args.min_detection}: "
+              f"kept {len(kept)}, dropped {dropped} -> {args.prune}")
+        # Dropping clips can empty a class entirely; a gloss present in training
+        # but absent from test is a silent hole in the reported accuracy.
+        lost = {c.gloss for c in clips} - {c.gloss for c in kept}
+        if lost:
+            print(f"warning: {len(lost)} gloss(es) lost every clip: {sorted(lost)}")
 
     return 0
 

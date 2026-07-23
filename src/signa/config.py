@@ -100,6 +100,7 @@ class Config:
     out_dir: Path = REPO_ROOT / "runs"
     tag: str = "baseline"
     device: str = "auto"  # "auto" | "cpu" | "cuda"
+    threads: int = 1  # CPU intra-op threads; 0 keeps torch's default
 
     extra: dict = field(default_factory=dict)
 

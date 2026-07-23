@@ -169,11 +169,17 @@ def resample(sequence: np.ndarray, frames: int) -> np.ndarray:
     if length == 1:
         return np.repeat(sequence.astype(np.float32), frames, axis=0)
 
-    source = np.linspace(0.0, length - 1, length)
-    target = np.linspace(0.0, length - 1, frames)
-    out = np.empty((frames, sequence.shape[1]), dtype=np.float32)
-    for dim in range(sequence.shape[1]):
-        out[:, dim] = np.interp(target, source, sequence[:, dim])
+    # Interpolate every dimension at once. np.interp is 1-D, so the obvious
+    # loop calls it 152 times per clip, and augmentation resamples three times
+    # per clip per epoch -- that loop dominated the training step until this
+    # was vectorised. Source positions are uniform, so the bracketing indices
+    # are arithmetic rather than a search.
+    target = np.linspace(0.0, length - 1, frames, dtype=np.float64)
+    lower = np.floor(target).astype(np.intp)
+    upper = np.minimum(lower + 1, length - 1)
+    weight = (target - lower).astype(np.float32)[:, None]
+    source = sequence.astype(np.float32, copy=False)
+    out = source[lower] * (1.0 - weight) + source[upper] * weight
 
     # Interpolating a 0/1 flag produces fractions; snap them back.
     for flag in (C.LEFT_PRESENT, C.RIGHT_PRESENT):

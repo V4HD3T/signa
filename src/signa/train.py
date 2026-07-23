@@ -89,6 +89,15 @@ def run(cfg: Config, val_signers: tuple[str, ...] | None = None) -> dict:
     seed_everything(cfg.seed)
     device = cfg.resolved_device()
 
+    # torch defaults to one thread per core, which for a model this small is
+    # actively harmful. Measured on 16 cores: one batch took 475 ms at one
+    # thread, 1462 ms at two, 3900 ms at four. Splitting an op this small costs
+    # more than the work it saves, and it degrades further when anything else
+    # is competing for cores. Set it explicitly rather than inherit it, and
+    # re-measure with --threads if the hardware or the model size changes.
+    if device == "cpu" and cfg.threads > 0:
+        torch.set_num_threads(cfg.threads)
+
     clips = read_manifest(cfg.manifest)
     glosses = select_glosses(clips, cfg.max_glosses)
     clips = filter_to(clips, glosses)
@@ -224,6 +233,9 @@ def parse_args(argv=None) -> tuple[Config, str | None]:
     parser.add_argument("--seed", type=int, default=defaults.seed)
     parser.add_argument("--tag", default=defaults.tag)
     parser.add_argument("--device", default=defaults.device)
+    parser.add_argument("--threads", type=int, default=defaults.threads,
+                        help="CPU intra-op threads; more is slower for a model this "
+                             "small (0 keeps torch's default)")
     args = parser.parse_args(argv)
 
     cfg = Config(
@@ -244,6 +256,7 @@ def parse_args(argv=None) -> tuple[Config, str | None]:
         seed=args.seed,
         tag=args.tag,
         device=args.device,
+        threads=args.threads,
     )
     return cfg, tuple(args.val_signers) if args.val_signers else None
 
