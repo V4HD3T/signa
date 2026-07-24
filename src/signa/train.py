@@ -166,6 +166,7 @@ def run(cfg: Config, val_signers: tuple[str, ...] | None = None) -> dict:
         "model": cfg.model,
         "glosses": len(glosses),
         "use_pose": cfg.use_pose,
+        "augment": cfg.augment,
         "train_clips": len(train_clips),
         "val_signers": list(val_signers),
         "test_signers": list(cfg.test_signers),

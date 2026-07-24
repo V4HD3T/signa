@@ -10,6 +10,28 @@ feature that removes push-to-sign and lets the demo find sign boundaries on its
 own, which is the point Signa stops being an isolated-clip classifier and starts
 being something you can sign at continuously.
 
+## 0.1.5 — one table for every run
+
+The numbers quoted through the README were copied there by hand from scattered
+`summary.json` files — the exact mechanism by which a number in prose drifts from
+the number the code produced. `signa.results` reads the artifacts directly:
+
+    python -m signa.results             # every run under runs/, best-first
+    python -m signa.results --markdown  # the same, ready to paste
+
+It gathers every `summary.json` and every `loso.json`, sorts best-first, and
+renders a table (model, pose, augmentation, glosses, top-1/top-5, clips). It is
+robust to runs that predate a field — the pose and augmentation flags were added
+to the summary only recently, and an older run shows "-" for them rather than a
+guessed value, because a guess here would be a false claim in the one place the
+numbers are read as fact. Output is ASCII (no em-dash, no ±) so a Windows console
+on any codepage renders it cleanly.
+
+`train.run` now also records `augment` in each summary, alongside `use_pose`, so
+future runs carry both flags into the table. 6 new tests (112 total) pin the
+row-building, the missing-field handling, the best-first sort, and the markdown
+rendering.
+
 ## 0.1.4 — pose ablation: do the 8 pose points earn their place?
 
 The frame carries both hands plus 8 upper-body pose points (shoulders, elbows,

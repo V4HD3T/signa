@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/V4HD3T/signa/actions/workflows/ci.yml/badge.svg)](https://github.com/V4HD3T/signa/actions/workflows/ci.yml)
 
-**Version:** 0.1.4 · [changelog](CHANGELOG.md)
+**Version:** 0.1.5 · [changelog](CHANGELOG.md)
 
 Signa recognises isolated Turkish Sign Language (TİD) words from a webcam. Sign a
 word — in `--auto` mode it finds the sign's start and end on its own — and the
@@ -276,6 +276,12 @@ python -m signa.crossval --manifest data/manifest_train_full.csv \
     --landmark-root data/landmarks_lsa64 --model tcn --tag lsa64
 ```
 
+Gather every run into one table (the numbers above come from here):
+
+```bash
+python -m signa.results --markdown
+```
+
 Compare against the Transformer:
 
 ```bash
@@ -401,7 +407,8 @@ alongside the subset — the leaderboard comparison only means anything at 226.
 - ✅ Leave-one-signer-out cross-validation (`signa.crossval`): TCN 97.7% ± 1.5% top-1 over all 10 folds — the headline no longer rests on one lucky split
 - ✅ Model ensemble (`signa.ensemble`): calibrated soft/hard voting — the two strong models reach 98.6%, but adding the weak one hurts; a measured "barely helps"
 - ✅ Pose ablation (`--no-pose`): the 8 pose points are worth +1.6 top-1 (98.2% → 96.6%) — hands carry most of it, pose adds a real little
-- ✅ CI (`.github/workflows/ci.yml`): the 105-test suite on Python 3.11 and 3.12, every push
+- ✅ CI (`.github/workflows/ci.yml`): the 112-test suite on Python 3.11 and 3.12, every push
+- ✅ Results aggregation (`signa.results`): every run's numbers in one table, read from the artifacts rather than copied by hand
 - ⏳ **Next:** AUTSL access via CodaLab registration ([`docs/dataset-access.md`](docs/dataset-access.md)) — the reportable TİD numbers
 - ⏳ (Stretch) Cross-dataset generalisation: train on AUTSL, test on BosphorusSign22k
 - ⏳ (Stretch) A thin FastAPI wrapper, so the demo can become a tab in Lingua later
@@ -432,6 +439,7 @@ src/signa/
   models.py      BiLSTM baseline, Transformer encoder, TCN
   train.py       training + signer-independent evaluation
   crossval.py    leave-one-signer-out cross-validation over train.run
+  results.py     gather every run's summary into one table   (no hardware)
   audit.py       corpus detection-rate report + prune
   report.py      per-class accuracy, confused pairs, error vs detection rate
   reject.py      temperature calibration + "not sure" reject option   (no hardware)
