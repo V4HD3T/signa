@@ -68,6 +68,41 @@ good answer.
 into `summary.json` alongside them, so the number and its caveats cannot drift
 apart.
 
+## Results so far (LSA64)
+
+The primary target is AUTSL, which is still being obtained. LSA64 is the
+plumbing test — Argentinian Sign Language, and the signers wear coloured gloves
+MediaPipe was never trained on, so these numbers measure that the pipeline
+works, not TİD performance. Reproduce with `python scripts/run_lsa64.py`.
+
+Signer-independent: train on 6 signers, validate on 2 (007/008), test on 2
+(009/010). Full 64-sign vocabulary, 625 test clips. Mean either-hand detection
+across the corpus is 0.81, so the signing hand is missing from roughly a fifth
+of frames before the model sees anything.
+
+| model | top-1 | top-5 |
+| --- | --- | --- |
+| BiLSTM + augmentation | 88.0% | 98.6% |
+| **Transformer + augmentation** | **97.1%** | **99.7%** |
+| BiLSTM, no augmentation | 88.2% | 98.1% |
+
+Two findings, both measured rather than assumed, and both the reason the
+comparison runs exist:
+
+**The Transformer pulls away as the vocabulary grows.** At 26 glosses it led the
+BiLSTM by 4.5 points; at 64 it leads by 9. The BiLSTM plateaus around 88% while
+the Transformer keeps scaling — the opposite of the usual "attention needs more
+data than we have" intuition at this size, and worth saying out loud because the
+plan assumed the BiLSTM was the safe baseline and the Transformer a nice-to-have.
+
+**Augmentation stopped mattering for the BiLSTM.** It was worth 4.9 points at 26
+glosses and is worth nothing at 64 (88.0 vs 88.2 is noise). More classes meant
+more than twice the training clips, and past some point the BiLSTM has enough
+real variety that synthetic variety adds nothing — or it has simply hit its
+capacity ceiling and augmentation cannot push through it. Either way, "augment
+because the dataset is small" is a claim with a shelf life, not a law. It will
+be re-measured on AUTSL, which is larger again.
+
 ## How it works
 
 ```
@@ -220,11 +255,13 @@ alongside the subset — the leaderboard comparison only means anything at 226.
 - ✅ Frame layout, MediaPipe extraction, normalisation, resampling — 24 tests, no camera or MediaPipe needed to run them
 - ✅ Manifest-backed dataset with a validated signer-independent split, scaling to a benchmark's own protocol
 - ✅ Landmark-space augmentation (time warp, rotation, scale, jitter; mirroring behind a flag)
-- ✅ BiLSTM baseline and Transformer encoder, both verified end to end on synthetic data
+- ✅ BiLSTM baseline and Transformer encoder, trained end to end on real video (LSA64), signer-independent
 - ✅ Training loop: three-way signer split, early stopping on validation, top-1/top-5 with the protocol recorded in `summary.json`
+- ✅ Corpus audit (`signa.audit`) with detection-rate reporting and `--prune`; run orchestration in `scripts/run_lsa64.py`
 - ✅ Self-recording tool and push-to-sign webcam demo
-- ⏳ **Next:** AUTSL access via CodaLab registration ([`docs/dataset-access.md`](docs/dataset-access.md))
-- ⏳ Real accuracy numbers, a confusion matrix, and the BiLSTM/Transformer comparison
+- ✅ First measured results: Transformer 97.1% / BiLSTM 88.0% top-1 on LSA64's 64 signs, signer-independent (see Results)
+- ⏳ **Next:** AUTSL access via CodaLab registration ([`docs/dataset-access.md`](docs/dataset-access.md)) — the reportable TİD numbers
+- ⏳ A confusion matrix over the vocabulary, to see which signs the plateau is made of
 - ⏳ (Stretch) Cross-dataset generalisation: train on AUTSL, test on BosphorusSign22k
 - ⏳ (Stretch) A thin FastAPI wrapper, so the demo can become a tab in Lingua later
 
@@ -234,7 +271,7 @@ Ordered so nothing is ever blocked — the slowest gate runs in the background
 while real data is already going through the pipeline.
 
 1. **Register on CodaLab for AUTSL**, and mail the BosphorusSign22k EULA request the same day. The second one is a parallel, unbounded wait that costs one email and unlocks the cross-dataset experiment.
-2. **Today, ungated:** pull LSA64 (direct download) and run extract → train → demo on it. Real multi-signer video, real signer-independent split, this afternoon. Not a reportable result — Argentinian, and the signers wear coloured gloves that MediaPipe was never trained on — but every seam gets exercised on real data.
+2. ✅ **Done:** LSA64 pulled, extracted, audited, and trained end to end. Transformer 97.1% / BiLSTM 88.0% top-1 signer-independent over 64 signs. Not a reportable *TİD* result — Argentinian, gloved signers — but the pipeline works and the model comparison already produced two findings worth keeping (see Results).
 3. On AUTSL arrival: `--dry-run`, verify the parse, extract, then train on 50–100 signs with the benchmark's own 31/6/6 split.
 4. BiLSTM baseline at the full 226, signer-independent, protocol written down next to the number.
 5. Augmentation ablation + Transformer comparison — two measured data points beat one asserted one.
@@ -253,7 +290,10 @@ src/signa/
   augment.py     landmark-space augmentation
   models.py      BiLSTM baseline, Transformer encoder
   train.py       training + signer-independent evaluation
+  audit.py       corpus detection-rate report + prune
   demo.py        push-to-sign webcam demo
+scripts/
+  run_lsa64.py   audit -> prune -> the three comparison runs
 tests/           normalisation, resampling, split, augmentation
 docs/            dataset access and the EULA request
 ```
