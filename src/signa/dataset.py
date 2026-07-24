@@ -91,6 +91,45 @@ def signer_independent_split(
     return train, test
 
 
+def pick_val_signers(train_clips: list[Clip], count: int = 1) -> tuple[str, ...]:
+    """Hold out the train signers with the *most* clips, so validation is the
+    least noisy signal available; deterministic, ties broken by name."""
+    counts: dict[str, int] = {}
+    for clip in train_clips:
+        counts[clip.signer] = counts.get(clip.signer, 0) + 1
+    ordered = sorted(counts, key=lambda signer: (-counts[signer], signer))
+    return tuple(ordered[:count])
+
+
+@dataclass(frozen=True)
+class Splits:
+    glosses: list[str]
+    train: list[Clip]
+    val: list[Clip]
+    test: list[Clip]
+    val_signers: tuple[str, ...]
+
+
+def make_splits(cfg: Config, val_signers: tuple[str, ...] | None = None) -> Splits:
+    """Turn a config into the train/val/test signer split, single-sourced.
+
+    Training and evaluation must agree on this exactly -- the trustworthiness of
+    every reported number rests on the split, so it is defined once here rather
+    than reconstructed wherever a model is loaded. Validation scales with the
+    test set: a benchmark that holds out N test signers gets N validation
+    signers, so checkpoint selection is never made on a noisier sample than the
+    number it is chasing.
+    """
+    clips = read_manifest(cfg.manifest)
+    glosses = select_glosses(clips, cfg.max_glosses)
+    clips = filter_to(clips, glosses)
+
+    train_pool, test = signer_independent_split(clips, cfg.test_signers)
+    val_signers = val_signers or pick_val_signers(train_pool, len(cfg.test_signers))
+    train, val = signer_independent_split(train_pool, val_signers)
+    return Splits(glosses, train, val, test, val_signers)
+
+
 class SignDataset(Dataset):
     """Landmark clips -> fixed-length tensors.
 

@@ -1,6 +1,6 @@
 # Signa — Isolated Turkish Sign Language Recognition
 
-**Version:** 0.0.1
+**Version:** 0.0.2 · [changelog](CHANGELOG.md)
 
 Signa recognises isolated Turkish Sign Language (TİD) words from a webcam. Hold
 a key, sign one word, release — the model returns its top guesses.
@@ -85,6 +85,14 @@ of frames before the model sees anything.
 | BiLSTM + augmentation | 88.0% | 98.6% |
 | **Transformer + augmentation** | **97.1%** | **99.7%** |
 | BiLSTM, no augmentation | 88.2% | 98.1% |
+
+Where the errors live (from `signa.report` on the Transformer): the 2.9% miss is
+not spread evenly — one sign sits at 50% while most classes are perfect — and it
+tracks hand detection hard. Clips the model got right averaged 0.887 either-hand
+detection; clips it got wrong averaged 0.653. Accuracy climbs monotonically with
+detection rate, 89.1% in the worst band to 98.4% in the best. A large share of
+the residual error is on clips whose features MediaPipe never fully captured —
+a fact about the corpus, not the model.
 
 Two findings, both measured rather than assumed, and both the reason the
 comparison runs exist:
@@ -229,6 +237,15 @@ Compare against the Transformer:
 python -m signa.train --model transformer --max-glosses 50 --tag transformer
 ```
 
+Analyse what a trained model gets wrong — per-class accuracy, confused pairs,
+and accuracy by hand-detection rate:
+
+```bash
+python -m signa.report --checkpoint runs/lsa64-full-transformer/best.pt \
+    --manifest data/manifest_train_full.csv --landmark-root data/landmarks_lsa64 \
+    --test-signers 009 010 --val-signers 007 008 --csv confusion.csv
+```
+
 Run the live demo:
 
 ```bash
@@ -260,8 +277,8 @@ alongside the subset — the leaderboard comparison only means anything at 226.
 - ✅ Corpus audit (`signa.audit`) with detection-rate reporting and `--prune`; run orchestration in `scripts/run_lsa64.py`
 - ✅ Self-recording tool and push-to-sign webcam demo
 - ✅ First measured results: Transformer 97.1% / BiLSTM 88.0% top-1 on LSA64's 64 signs, signer-independent (see Results)
+- ✅ Error analysis (`signa.report`): per-class accuracy, confused pairs, and accuracy-by-detection-rate — the errors track hand detection, not just the model
 - ⏳ **Next:** AUTSL access via CodaLab registration ([`docs/dataset-access.md`](docs/dataset-access.md)) — the reportable TİD numbers
-- ⏳ A confusion matrix over the vocabulary, to see which signs the plateau is made of
 - ⏳ (Stretch) Cross-dataset generalisation: train on AUTSL, test on BosphorusSign22k
 - ⏳ (Stretch) A thin FastAPI wrapper, so the demo can become a tab in Lingua later
 
@@ -291,6 +308,7 @@ src/signa/
   models.py      BiLSTM baseline, Transformer encoder
   train.py       training + signer-independent evaluation
   audit.py       corpus detection-rate report + prune
+  report.py      per-class accuracy, confused pairs, error vs detection rate
   demo.py        push-to-sign webcam demo
 scripts/
   run_lsa64.py   audit -> prune -> the three comparison runs

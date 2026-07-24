@@ -31,14 +31,7 @@ from torch.utils.data import DataLoader
 
 from . import models
 from .config import Config
-from .dataset import (
-    Clip,
-    SignDataset,
-    filter_to,
-    read_manifest,
-    select_glosses,
-    signer_independent_split,
-)
+from .dataset import SignDataset, make_splits
 
 
 def seed_everything(seed: int) -> None:
@@ -75,16 +68,6 @@ def evaluate(model: nn.Module, loader: DataLoader, device: str) -> dict[str, flo
     }
 
 
-def pick_val_signers(train_clips: list[Clip], count: int = 1) -> tuple[str, ...]:
-    """Hold out the train signers with the *most* clips, so validation is the
-    least noisy signal available; deterministic, ties broken by name."""
-    counts: dict[str, int] = {}
-    for clip in train_clips:
-        counts[clip.signer] = counts.get(clip.signer, 0) + 1
-    ordered = sorted(counts, key=lambda signer: (-counts[signer], signer))
-    return tuple(ordered[:count])
-
-
 def run(cfg: Config, val_signers: tuple[str, ...] | None = None) -> dict:
     seed_everything(cfg.seed)
     device = cfg.resolved_device()
@@ -98,16 +81,10 @@ def run(cfg: Config, val_signers: tuple[str, ...] | None = None) -> dict:
     if device == "cpu" and cfg.threads > 0:
         torch.set_num_threads(cfg.threads)
 
-    clips = read_manifest(cfg.manifest)
-    glosses = select_glosses(clips, cfg.max_glosses)
-    clips = filter_to(clips, glosses)
-
-    train_pool, test_clips = signer_independent_split(clips, cfg.test_signers)
-    # Scale validation with the test set: a benchmark that holds out 6 test
-    # signers (AUTSL) deserves 6 validation signers too, or checkpoint
-    # selection is made on a sample far noisier than the number it is chasing.
-    val_signers = val_signers or pick_val_signers(train_pool, len(cfg.test_signers))
-    train_clips, val_clips = signer_independent_split(train_pool, val_signers)
+    splits = make_splits(cfg, val_signers)
+    glosses = splits.glosses
+    train_clips, val_clips, test_clips = splits.train, splits.val, splits.test
+    val_signers = splits.val_signers
 
     print(
         f"{len(glosses)} glosses | "
