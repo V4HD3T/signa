@@ -1,3 +1,3 @@
 """Signa -- isolated Turkish Sign Language (TID) word recognition."""
 
-__version__ = "0.0.4"
+__version__ = "0.0.5"

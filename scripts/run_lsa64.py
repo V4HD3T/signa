@@ -63,6 +63,7 @@ def main() -> int:
     runs = [
         dict(model="bilstm", tag="lsa64-full", augment=True),
         dict(model="transformer", tag="lsa64-full", augment=True),
+        dict(model="tcn", tag="lsa64-full", augment=True),
         dict(model="bilstm", tag="lsa64-full-noaug", augment=False),
     ]
     table = []

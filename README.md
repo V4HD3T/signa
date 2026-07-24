@@ -1,6 +1,6 @@
 # Signa — Isolated Turkish Sign Language Recognition
 
-**Version:** 0.0.4 · [changelog](CHANGELOG.md)
+**Version:** 0.0.5 · [changelog](CHANGELOG.md)
 
 Signa recognises isolated Turkish Sign Language (TİD) words from a webcam. Hold
 a key, sign one word, release — the model returns its top guesses.
@@ -80,36 +80,43 @@ Signer-independent: train on 6 signers, validate on 2 (007/008), test on 2
 across the corpus is 0.81, so the signing hand is missing from roughly a fifth
 of frames before the model sees anything.
 
-| model | top-1 | top-5 |
-| --- | --- | --- |
-| BiLSTM + augmentation | 88.0% | 98.6% |
-| **Transformer + augmentation** | **97.1%** | **99.7%** |
-| BiLSTM, no augmentation | 88.2% | 98.1% |
+| model | top-1 | top-5 | params |
+| --- | --- | --- | --- |
+| BiLSTM + augmentation | 88.0% | 98.6% | 699k |
+| Transformer + augmentation | 97.1% | 99.7% | 424k |
+| **TCN + augmentation** | **98.2%** | **100%** | **225k** |
+| BiLSTM, no augmentation | 88.2% | 98.1% | 699k |
 
-Where the errors live (from `signa.report` on the Transformer): the 2.9% miss is
-not spread evenly — one sign sits at 50% while most classes are perfect — and it
+Where the errors live (from `signa.report` on the Transformer): the miss is not
+spread evenly — one sign sits at 50% while most classes are perfect — and it
 tracks hand detection hard. Clips the model got right averaged 0.887 either-hand
 detection; clips it got wrong averaged 0.653. Accuracy climbs monotonically with
 detection rate, 89.1% in the worst band to 98.4% in the best. A large share of
 the residual error is on clips whose features MediaPipe never fully captured —
 a fact about the corpus, not the model.
 
-Two findings, both measured rather than assumed, and both the reason the
+Three findings, all measured rather than assumed, and all the reason the
 comparison runs exist:
 
-**The Transformer pulls away as the vocabulary grows.** At 26 glosses it led the
-BiLSTM by 4.5 points; at 64 it leads by 9. The BiLSTM plateaus around 88% while
-the Transformer keeps scaling — the opposite of the usual "attention needs more
-data than we have" intuition at this size, and worth saying out loud because the
-plan assumed the BiLSTM was the safe baseline and the Transformer a nice-to-have.
+**Recurrence was the bottleneck, not a lack of attention.** The BiLSTM plateaus
+near 88% while the Transformer reached 97%, which looked like a win for attention
+— until the TCN, which is neither recurrent nor attentional, edged *past* the
+Transformer at 98.2% with roughly a third of the BiLSTM's parameters. What the
+BiLSTM lacked was not attention but parallel access to the whole clip; a
+sequential hidden-state bottleneck is what held it back. Both convolution and
+attention clear it, and the convolution does so more cheaply.
+
+**The Transformer's lead over the BiLSTM widened with the vocabulary** — 4.5
+points at 26 glosses, 9 at 64 — the opposite of the usual "attention is
+data-hungry" intuition at ~30 clips per class. The plan treated the BiLSTM as
+the safe baseline; on this data it is the weakest of the three.
 
 **Augmentation stopped mattering for the BiLSTM.** It was worth 4.9 points at 26
-glosses and is worth nothing at 64 (88.0 vs 88.2 is noise). More classes meant
-more than twice the training clips, and past some point the BiLSTM has enough
-real variety that synthetic variety adds nothing — or it has simply hit its
-capacity ceiling and augmentation cannot push through it. Either way, "augment
-because the dataset is small" is a claim with a shelf life, not a law. It will
-be re-measured on AUTSL, which is larger again.
+glosses and nothing at 64 (88.0 vs 88.2 is noise). More classes meant more than
+twice the training clips, and past some point real variety crowds out synthetic
+variety — or the BiLSTM has simply hit its ceiling. "Augment because the dataset
+is small" is a claim with a shelf life, not a law. Re-measured on AUTSL, which is
+larger again.
 
 ## How it works
 
@@ -332,7 +339,7 @@ alongside the subset — the leaderboard comparison only means anything at 226.
 - ✅ Frame layout, MediaPipe extraction, normalisation, resampling — 24 tests, no camera or MediaPipe needed to run them
 - ✅ Manifest-backed dataset with a validated signer-independent split, scaling to a benchmark's own protocol
 - ✅ Landmark-space augmentation (time warp, rotation, scale, jitter; mirroring behind a flag)
-- ✅ BiLSTM baseline and Transformer encoder, trained end to end on real video (LSA64), signer-independent
+- ✅ Three architectures — BiLSTM, Transformer, TCN — trained end to end on real video (LSA64), signer-independent; the TCN wins at 98.2% top-1 on a third of the BiLSTM's parameters
 - ✅ Training loop: three-way signer split, early stopping on validation, top-1/top-5 with the protocol recorded in `summary.json`
 - ✅ Corpus audit (`signa.audit`) with detection-rate reporting and `--prune`; run orchestration in `scripts/run_lsa64.py`
 - ✅ Self-recording tool and push-to-sign webcam demo
@@ -367,7 +374,7 @@ src/signa/
   record.py      webcam -> clips, for testing without the dataset
   dataset.py     manifest, signer-independent split, torch Dataset
   augment.py     landmark-space augmentation
-  models.py      BiLSTM baseline, Transformer encoder
+  models.py      BiLSTM baseline, Transformer encoder, TCN
   train.py       training + signer-independent evaluation
   audit.py       corpus detection-rate report + prune
   report.py      per-class accuracy, confused pairs, error vs detection rate

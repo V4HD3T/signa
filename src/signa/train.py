@@ -191,7 +191,8 @@ def parse_args(argv=None) -> tuple[Config, str | None]:
     defaults = Config()
     parser.add_argument("--manifest", type=Path, default=defaults.manifest)
     parser.add_argument("--landmark-root", type=Path, default=defaults.landmark_root)
-    parser.add_argument("--model", choices=["bilstm", "transformer"], default=defaults.model)
+    parser.add_argument("--model", choices=["bilstm", "transformer", "tcn"],
+                        default=defaults.model)
     parser.add_argument("--max-glosses", type=int, default=defaults.max_glosses,
                         help="0 or negative means all glosses in the manifest")
     parser.add_argument("--test-signers", nargs="+", default=list(defaults.test_signers))

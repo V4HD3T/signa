@@ -10,6 +10,35 @@ feature that removes push-to-sign and lets the demo find sign boundaries on its
 own, which is the point Signa stops being an isolated-clip classifier and starts
 being something you can sign at continuously.
 
+## 0.0.5 — a third architecture, and what it settles
+
+A temporal convolutional network (`--model tcn`): dilated 1-D convolutions over
+the frame sequence, non-causal because an isolated clip is pre-trimmed and has no
+future to hide, in residual blocks whose doubling dilation sees the whole ~48
+frames in a handful of layers.
+
+It was built to answer a question 0.0.1 left open. The BiLSTM plateaued near 88%
+and the Transformer reached 97%, which read as a win for attention — but a win
+for attention *specifically*, or just for anything that isn't a recurrent
+bottleneck? The TCN is neither recurrent nor attentional, so where it lands
+decides between the two. It landed at **98.2% top-1, 100% top-5, ahead of the
+Transformer and on ~225k parameters against the BiLSTM's 699k** — a third of the
+size, the best of the three. So the BiLSTM's ceiling was the sequential
+hidden-state bottleneck, not a missing attention mechanism: parallel access to
+the whole clip is what mattered, and convolution buys it more cheaply than
+attention. A measured answer to a question that would otherwise have been a
+hand-wave in the write-up.
+
+`scripts/run_lsa64.py` now trains all three architectures; the TCN inherits the
+reject option and everything else for free, since the only thing that changed is
+one branch in `models.build`. On the TCN calibration chose a threshold of 0.0 —
+it is accurate enough on validation (99.1%) to meet the 99% bar without refusing
+anything, which is the reject logic correctly declining to reject.
+
+5 new tests (76 total) covering all three models as one contract: batch and
+single-clip inference, gradient flow to every parameter, variable clip length,
+and rejection of an unknown model name.
+
 ## 0.0.4 — "I don't know" (calibrated reject option)
 
 The demo and learning mode always returned a top-1, even for a fumble, noise, or

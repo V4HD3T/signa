@@ -73,11 +73,12 @@ class Config:
     normalize: bool = True
 
     # Model
-    model: str = "bilstm"  # "bilstm" | "transformer"
+    model: str = "bilstm"  # "bilstm" | "transformer" | "tcn"
     hidden: int = 128
     layers: int = 2
     dropout: float = 0.3
     heads: int = 4  # transformer only
+    kernel: int = 3  # tcn only; odd, so blocks stay length-preserving
 
     # Optimisation
     epochs: int = 120
