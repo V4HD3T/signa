@@ -10,6 +10,21 @@ feature that removes push-to-sign and lets the demo find sign boundaries on its
 own, which is the point Signa stops being an isolated-clip classifier and starts
 being something you can sign at continuously.
 
+## 0.1.2 — CI: the test suite runs on every push
+
+The 98 tests were only ever a promise if you remembered to run them. A GitHub
+Actions workflow now runs them on every push and pull request, on Python 3.11 and
+3.12 — both interpreters MediaPipe supports — so a regression is caught by the
+repository, not by the next person to pull.
+
+CI installs only numpy, a CPU-only torch, and pytest: the whole suite is
+hardware-free by design, with every MediaPipe and OpenCV import kept lazy inside
+the functions that need a camera, so nothing about the tests requires either. The
+badge on the README reports the result of the latest run.
+
+No behaviour change — this is the guardrail around everything the earlier
+versions built.
+
 ## 0.1.1 — leave-one-signer-out, so the headline survives a hard question
 
 The reported numbers rested on one held-out signer pair (009/010). A defence asks
