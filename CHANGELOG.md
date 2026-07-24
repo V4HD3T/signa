@@ -10,6 +10,43 @@ feature that removes push-to-sign and lets the demo find sign boundaries on its
 own, which is the point Signa stops being an isolated-clip classifier and starts
 being something you can sign at continuously.
 
+## 0.1.0 — automatic segmentation (push-to-sign goes away)
+
+The milestone the 0.0.x line was reserved for. Until now the user held a key to
+mark where each sign began and ended, because the model is trained on pre-trimmed
+clips and "when does a sign start and stop" is a separate problem. `signa.segment`
+solves that problem, so `--auto` mode lets the user just sign.
+
+The signal is motion energy — per-frame hand velocity in shoulder-width units,
+the same normalisation the model uses, so a threshold holds across signers at
+different distances from the camera. A sign is a burst of motion between spells of
+stillness. The decision is a two-state machine with hysteresis: it takes more
+motion to *start* a sign than to keep one going, so a momentary dip mid-sign does
+not cut it in two and a twitch at rest does not open a phantom one. A minimum
+length rejects blips; a maximum force-cuts a signer who never returns to rest.
+
+The one design choice that took a measurement: a lost hand reads as NaN, not zero
+motion. This corpus drops a hand on roughly a fifth of frames, and reporting a
+dropout as stillness let detection gaps masquerade as the end of a sign — half of
+trimmed clips segmented as zero signs. Treating NaN as "hold the sign open
+through the gap" lifted that to ~74% of trimmed clips segmenting as exactly one
+sign, with the failures concentrated on the low-detection clips the audit already
+flags. Honest and corpus-bounded, not tuned away.
+
+All of it is pure over a stream of energy values, so the finite-state machine and
+the bounded frame buffer (`FrameStream`, shared by the demo and the tutor) are
+tested exhaustively on synthetic signals — single burst, chatter rejection,
+hysteresis across a dip, dropout survival, max-length cut, two signs split by
+rest, the trailing flush. The webcam loops only feed frames in.
+
+`--auto` is opt-in on both `signa.demo` and `signa.learn`; push-to-sign stays the
+default, because automatic segmentation quality is bounded by hand-detection
+quality and the honest fallback matters. `signa.segment.calibrate` suggests
+thresholds from a few seconds of the user holding still.
+
+17 new tests (91 total). This is where Signa stops being an isolated-clip
+classifier you drive and starts being something you sign at.
+
 ## 0.0.5 — a third architecture, and what it settles
 
 A temporal convolutional network (`--model tcn`): dilated 1-D convolutions over

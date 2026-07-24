@@ -128,6 +128,87 @@ def run_session(model, labels, cfg, store_path, names, *, device, camera, min_fr
     return 0
 
 
+def run_auto_session(model, labels, cfg, store_path, names, *, device, camera, temperature,
+                     reject_threshold, enter, exit, today=None):
+    """Keyless practice: the segmenter (signa.segment) detects each completed
+    sign, so the learner just signs the prompt instead of holding a key. Same
+    grading and scheduling as the push-to-sign session, driven by motion instead
+    of a keypress."""
+    import cv2
+
+    from .landmarks import Extractor, normalize
+    from .segment import FrameStream, Segmenter
+
+    today = today or date.today()
+    progress = practice.load(store_path)
+    vocabulary = list(labels)
+    segmenter = Segmenter(enter=enter, exit=exit)
+
+    capture = cv2.VideoCapture(camera)
+    if not capture.isOpened():
+        print(f"could not open camera {camera}")
+        return 1
+
+    target, is_new = practice.next_gloss(progress, vocabulary, today)
+    banner, detail = "sign when ready", ""
+
+    with Extractor() as extractor:
+        stream = FrameStream(segmenter, normalise=lambda f: normalize(f[None])[0])
+        try:
+            while True:
+                ok, image = capture.read()
+                if not ok:
+                    break
+
+                sign = stream.push(extractor.frame(image))
+                if sign is not None:
+                    ranked = [(labels[i], p)
+                              for i, p in classify(model, sign, cfg, device,
+                                                   temperature=temperature)]
+                    if ranked and ranked[0][1] < reject_threshold:
+                        banner, detail = "couldn't read that", "try again, more clearly"
+                    else:
+                        attempt = practice.grade(target, ranked)
+                        progress.record(target, attempt.quality, today)
+                        practice.save(progress, store_path)
+                        banner, detail = _feedback(attempt, names)
+                        target, is_new = practice.next_gloss(progress, vocabulary, today)
+
+                view = cv2.flip(image, 1)
+                height = view.shape[0]
+                tag = "NEW" if is_new else "review"
+                cv2.putText(view, f"sign: {display_name(target, names)}  [{tag}]",
+                            (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
+                cv2.putText(view, f"streak {progress.streak(today)}d   "
+                            f"today {progress.reviews_today(today)}/{progress.daily_goal}",
+                            (20, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (180, 180, 180), 1)
+                if segmenter.active:
+                    cv2.circle(view, (30, height - 30), 12, (0, 0, 255), -1)
+                cv2.putText(view, banner, (20, height - 55),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+                if detail:
+                    cv2.putText(view, detail, (20, height - 25),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.55, (180, 180, 180), 1)
+                cv2.putText(view, "sign the prompt  |  n skip  |  ESC quit",
+                            (20, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (140, 140, 140), 1)
+                cv2.imshow("signa - learn (auto)", view)
+
+                key = cv2.waitKey(1) & 0xFF
+                if key == 27:
+                    break
+                if key == ord("n"):
+                    target, is_new = practice.next_gloss(progress, vocabulary, today)
+                    banner, detail = "skipped", ""
+        finally:
+            capture.release()
+            cv2.destroyAllWindows()
+
+    practice.save(progress, store_path)
+    print(f"streak {progress.streak(today)} day(s), "
+          f"{progress.reviews_today(today)} reviews today -> {store_path}")
+    return 0
+
+
 def _feedback(attempt: practice.Attempt, names: dict[str, str]) -> tuple[str, str]:
     guessed = display_name(attempt.predicted, names)
     if attempt.verdict == practice.CORRECT:
@@ -147,6 +228,10 @@ def main(argv=None) -> int:
     parser.add_argument("--camera", type=int, default=0)
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--min-frames", type=int, default=10)
+    parser.add_argument("--auto", action="store_true",
+                        help="keyless: segment signs automatically instead of holding SPACE")
+    parser.add_argument("--enter", type=float, default=None, help="start-of-sign motion (auto)")
+    parser.add_argument("--exit", type=float, default=None, help="end-of-sign stillness (auto)")
     args = parser.parse_args(argv)
 
     from .reject import load_calibration
@@ -159,6 +244,14 @@ def main(argv=None) -> int:
     print(f"{len(labels)} signs loaded; progress at {args.progress}"
           + (f"; calibrated (T={temperature}, reject below {threshold:.0%})"
              if calibration else "; no calibration"))
+
+    if args.auto:
+        from .segment import ENTER, EXIT
+
+        return run_auto_session(model, labels, cfg, args.progress, names,
+                                device=args.device, camera=args.camera,
+                                temperature=temperature, reject_threshold=threshold,
+                                enter=args.enter or ENTER, exit=args.exit or EXIT)
 
     return run_session(model, labels, cfg, args.progress, names,
                        device=args.device, camera=args.camera, min_frames=args.min_frames,

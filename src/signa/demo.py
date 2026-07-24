@@ -60,6 +60,56 @@ def classify(model, sequence: np.ndarray, cfg, device: str, top: int = 3,
     return list(zip(indices.tolist(), scores.tolist()))
 
 
+def _auto_loop(capture, extractor, model, labels, cfg, *, device, temperature,
+               threshold, enter, exit):
+    """Continuous, keyless recognition: a motion-energy segmenter (signa.segment)
+    finds each sign's start and end, so nothing is held. This is what push-to-sign
+    was standing in for until segmentation existed."""
+    import cv2
+
+    from .landmarks import normalize
+    from .segment import FrameStream, Segmenter
+
+    segmenter = Segmenter(enter=enter, exit=exit)
+    stream = FrameStream(segmenter, normalise=lambda f: normalize(f[None])[0])
+    results: list[tuple[str, float]] = []
+
+    while True:
+        ok, image = capture.read()
+        if not ok:
+            break
+
+        sign = stream.push(extractor.frame(image))
+        if sign is not None:
+            results = [(labels[i], s)
+                       for i, s in classify(model, sign, cfg, device, temperature=temperature)]
+            print(("not sure: " if results[0][1] < threshold else "")
+                  + "  ".join(f"{g} {s:.0%}" for g, s in results))
+
+        view = cv2.flip(image, 1)
+        height = view.shape[0]
+        state = "signing..." if segmenter.active else "sign any time  |  ESC to quit"
+        colour = (0, 0, 255) if segmenter.active else (200, 200, 200)
+        cv2.putText(view, state, (20, 38), cv2.FONT_HERSHEY_SIMPLEX, 0.6, colour, 1)
+
+        if results and results[0][1] < threshold:
+            cv2.putText(view, "not sure", (20, height - 82),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 165, 255), 2)
+            for row, (gloss, score) in enumerate(results):
+                cv2.putText(view, f"{gloss}?  {score:.0%}", (20, height - 52 + row * 24),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (140, 140, 140), 1)
+        else:
+            for row, (gloss, score) in enumerate(results):
+                c = (0, 255, 0) if row == 0 else (180, 180, 180)
+                cv2.putText(view, f"{gloss}  {score:.0%}", (20, height - 80 + row * 28),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.9 if row == 0 else 0.6, c,
+                            2 if row == 0 else 1)
+
+        cv2.imshow("signa - auto", view)
+        if (cv2.waitKey(1) & 0xFF) == 27:
+            break
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -68,6 +118,12 @@ def main(argv=None) -> int:
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--min-frames", type=int, default=10,
                         help="takes shorter than this are ignored as fumbles")
+    parser.add_argument("--auto", action="store_true",
+                        help="keyless: segment signs automatically instead of holding SPACE")
+    parser.add_argument("--enter", type=float, default=None,
+                        help="motion threshold to start a sign (auto mode)")
+    parser.add_argument("--exit", type=float, default=None,
+                        help="stillness threshold to end a sign (auto mode)")
     args = parser.parse_args(argv)
 
     import cv2
@@ -88,6 +144,19 @@ def main(argv=None) -> int:
     if not capture.isOpened():
         print(f"could not open camera {args.camera}")
         return 1
+
+    if args.auto:
+        from .segment import ENTER, EXIT
+
+        with Extractor() as extractor:
+            try:
+                _auto_loop(capture, extractor, model, labels, cfg, device=args.device,
+                           temperature=temperature, threshold=threshold,
+                           enter=args.enter or ENTER, exit=args.exit or EXIT)
+            finally:
+                capture.release()
+                cv2.destroyAllWindows()
+        return 0
 
     buffer: list[np.ndarray] = []
     holding = False

@@ -1,9 +1,10 @@
 # Signa — Isolated Turkish Sign Language Recognition
 
-**Version:** 0.0.5 · [changelog](CHANGELOG.md)
+**Version:** 0.1.0 · [changelog](CHANGELOG.md)
 
-Signa recognises isolated Turkish Sign Language (TİD) words from a webcam. Hold
-a key, sign one word, release — the model returns its top guesses.
+Signa recognises isolated Turkish Sign Language (TİD) words from a webcam. Sign a
+word — in `--auto` mode it finds the sign's start and end on its own — and the
+model returns its top guesses, or an honest "not sure".
 
 Named after the Latin *signa*, "signs", as a sibling to
 [Lingua](../lingua) (*lingua*, "tongue"). Same author, same
@@ -261,16 +262,16 @@ python -m signa.reject --checkpoint runs/lsa64-full-transformer/best.pt \
     --test-signers 009 010 --val-signers 007 008 --target-accuracy 0.99 --write
 ```
 
-Run the live demo:
+Run the live demo — hold SPACE, or `--auto` to sign continuously with no key:
 
 ```bash
-python -m signa.demo --checkpoint runs/baseline-bilstm/best.pt
+python -m signa.demo --checkpoint runs/lsa64-full-tcn/best.pt --auto
 ```
 
-Practise signing with the trained model as a tutor:
+Practise signing with the trained model as a tutor (also takes `--auto`):
 
 ```bash
-python -m signa.learn --checkpoint runs/lsa64-full-transformer/best.pt --labels names.json
+python -m signa.learn --checkpoint runs/lsa64-full-tcn/best.pt --labels names.json
 ```
 
 ## Knowing when to say nothing
@@ -319,13 +320,25 @@ local dates, not UTC. Progress persists to JSON between sessions.
 Gloss ids like `001` are not words; pass `--labels names.json` (a `{gloss: name}`
 map) to show real sign names.
 
-## Live demo: push-to-sign
+## Live demo: two ways to bracket a sign
 
 The model is trained on pre-trimmed clips, so "when does a sign start and stop"
 is a *different* problem — segmentation, the same one that makes continuous
-translation hard. Holding a key while signing removes it from the MVP entirely
-rather than solving it badly. Automatic motion-energy segmentation is a v2 item,
-and is where the interesting failure modes live.
+translation hard.
+
+**Push-to-sign** (default) sidesteps it: hold SPACE, sign, release. Reliable, and
+the honest fallback.
+
+**`--auto`** solves it. `signa.segment` watches motion energy — per-frame hand
+velocity in shoulder-width units — and a two-state machine with hysteresis finds
+each sign's start and end, so nothing is held. It takes more motion to start a
+sign than to keep one going, so a dip mid-sign doesn't cut it in two; a minimum
+length rejects twitches, a maximum force-cuts a signer who never rests. A lost
+hand is treated as "hold", not stillness — this corpus drops a hand on a fifth of
+frames, and without that distinction detection gaps masquerade as sign endings.
+The finite-state machine is pure and tested on synthetic energy streams; the
+webcam loop only feeds it frames. Segmentation quality is bounded by
+hand-detection quality, which is why push-to-sign stays the default.
 
 ## Vocabulary choice
 
@@ -347,6 +360,7 @@ alongside the subset — the leaderboard comparison only means anything at 226.
 - ✅ Error analysis (`signa.report`): per-class accuracy, confused pairs, and accuracy-by-detection-rate — the errors track hand detection, not just the model
 - ✅ Learning mode (`signa.learn` + `signa.practice`): SM-2 spaced repetition, grading, streaks and daily goal — pedagogy tested hardware-free
 - ✅ Calibrated reject option (`signa.reject`): temperature scaling + a validation-chosen threshold — rejecting 5.3% of signs lifts accuracy on the rest from 97.1% to 98.5%
+- ✅ Automatic segmentation (`signa.segment`): motion-energy FSM with hysteresis and dropout handling, keyless `--auto` mode in demo and tutor — push-to-sign removed as a requirement
 - ⏳ **Next:** AUTSL access via CodaLab registration ([`docs/dataset-access.md`](docs/dataset-access.md)) — the reportable TİD numbers
 - ⏳ (Stretch) Cross-dataset generalisation: train on AUTSL, test on BosphorusSign22k
 - ⏳ (Stretch) A thin FastAPI wrapper, so the demo can become a tab in Lingua later
@@ -357,11 +371,11 @@ Ordered so nothing is ever blocked — the slowest gate runs in the background
 while real data is already going through the pipeline.
 
 1. **Register on CodaLab for AUTSL**, and mail the BosphorusSign22k EULA request the same day. The second one is a parallel, unbounded wait that costs one email and unlocks the cross-dataset experiment.
-2. ✅ **Done:** LSA64 pulled, extracted, audited, and trained end to end. Transformer 97.1% / BiLSTM 88.0% top-1 signer-independent over 64 signs. Not a reportable *TİD* result — Argentinian, gloved signers — but the pipeline works and the model comparison already produced two findings worth keeping (see Results).
+2. ✅ **Done:** LSA64 pulled, extracted, audited, and trained end to end. Three architectures compared (TCN 98.2% / Transformer 97.1% / BiLSTM 88.0% top-1, signer-independent over 64 signs), a calibrated reject option, learning mode, and `--auto` segmentation. Not a reportable *TİD* result — Argentinian, gloved signers — but the whole pipeline works, keyless, with findings worth keeping (see Results).
 3. On AUTSL arrival: `--dry-run`, verify the parse, extract, then train on 50–100 signs with the benchmark's own 31/6/6 split.
-4. BiLSTM baseline at the full 226, signer-independent, protocol written down next to the number.
-5. Augmentation ablation + Transformer comparison — two measured data points beat one asserted one.
-6. Push-to-sign demo over the real vocabulary.
+4. All three models at the full 226, signer-independent, protocol written down next to each number.
+5. Re-measure the augmentation ablation and the architecture comparison on real TİD data — do the LSA64 findings hold?
+6. Keyless demo and tutor over the real vocabulary.
 7. (Stretch) Cross-dataset generalisation, then the HTTP boundary and a Lingua tab.
 
 ## Layout
@@ -379,9 +393,10 @@ src/signa/
   audit.py       corpus detection-rate report + prune
   report.py      per-class accuracy, confused pairs, error vs detection rate
   reject.py      temperature calibration + "not sure" reject option   (no hardware)
-  demo.py        push-to-sign webcam demo
+  segment.py     motion-energy segmentation FSM + frame buffer   (no hardware)
+  demo.py        webcam demo: push-to-sign, or --auto continuous
   practice.py    learning-mode pedagogy: grading, SM-2, streaks   (no hardware)
-  learn.py       learning-mode webcam session (thin loop over practice + demo)
+  learn.py       learning-mode webcam session (push-to-sign or --auto)
 scripts/
   run_lsa64.py   audit -> prune -> the three comparison runs
 tests/           normalisation, resampling, split, augmentation
