@@ -10,6 +10,27 @@ feature that removes push-to-sign and lets the demo find sign boundaries on its
 own, which is the point Signa stops being an isolated-clip classifier and starts
 being something you can sign at continuously.
 
+## 0.1.1 — leave-one-signer-out, so the headline survives a hard question
+
+The reported numbers rested on one held-out signer pair (009/010). A defence asks
+the obvious thing back: what if that split was lucky? `signa.crossval` answers it
+by holding out each of the 10 signers in turn, training on the other 9, and
+reporting the mean and spread across every fold.
+
+The TCN scores **97.7% ± 1.5% top-1** (99.8% ± 0.2% top-5) over all 10 folds,
+from 94.7% on the hardest held-out signer (003) to 99.4% on the easiest (009).
+So the single-fold 98.2% was mildly optimistic — 009 turns out to be one of the
+easier signers — but the spread is tight enough that the result barely depends on
+which signer you hold out, which is exactly what cross-validation is for. The
+headline is now the LOSO mean, not the best fold.
+
+Each fold keeps the same three-way discipline: the test signer is out end to end,
+one of the remaining nine is held out again for validation (picked the usual way).
+`--signers` restricts which signers get a fold for a faster partial run, but never
+restricts the training pool — the check is on the manifest, not the folds. Fold
+planning and aggregation are pure and tested (7 new tests, 98 total); the training
+is `train.run` unchanged, once per fold.
+
 ## 0.1.0 — automatic segmentation (push-to-sign goes away)
 
 The milestone the 0.0.x line was reserved for. Until now the user held a key to

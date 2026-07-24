@@ -1,6 +1,6 @@
 # Signa — Isolated Turkish Sign Language Recognition
 
-**Version:** 0.1.0 · [changelog](CHANGELOG.md)
+**Version:** 0.1.1 · [changelog](CHANGELOG.md)
 
 Signa recognises isolated Turkish Sign Language (TİD) words from a webcam. Sign a
 word — in `--auto` mode it finds the sign's start and end on its own — and the
@@ -87,6 +87,15 @@ of frames before the model sees anything.
 | Transformer + augmentation | 97.1% | 99.7% | 424k |
 | **TCN + augmentation** | **98.2%** | **100%** | **225k** |
 | BiLSTM, no augmentation | 88.2% | 98.1% | 699k |
+
+**Is that one number a lucky split?** Leave-one-signer-out cross-validation
+(`signa.crossval`) answers it: hold out each of the 10 signers in turn, train on
+the other 9, average. The TCN scores **97.7% ± 1.5% top-1** (99.8% ± 0.2% top-5)
+across all 10 folds — from 94.7% on the hardest held-out signer to 99.4% on the
+easiest. The single-fold 98.2% was mildly optimistic (signer 009 is an easy one),
+but the spread is tight: the result barely moves with which signer you hold out,
+which is the whole point of reporting it this way. The defensible headline is the
+LOSO mean, not the best fold.
 
 Where the errors live (from `signa.report` on the Transformer): the miss is not
 spread evenly — one sign sits at 50% while most classes are perfect — and it
@@ -239,6 +248,13 @@ Train and evaluate signer-independently:
 python -m signa.train --model bilstm --max-glosses 50 --test-signers User_1
 ```
 
+Cross-validate over every signer (the defensible headline, not one fold):
+
+```bash
+python -m signa.crossval --manifest data/manifest_train_full.csv \
+    --landmark-root data/landmarks_lsa64 --model tcn --tag lsa64
+```
+
 Compare against the Transformer:
 
 ```bash
@@ -361,6 +377,7 @@ alongside the subset — the leaderboard comparison only means anything at 226.
 - ✅ Learning mode (`signa.learn` + `signa.practice`): SM-2 spaced repetition, grading, streaks and daily goal — pedagogy tested hardware-free
 - ✅ Calibrated reject option (`signa.reject`): temperature scaling + a validation-chosen threshold — rejecting 5.3% of signs lifts accuracy on the rest from 97.1% to 98.5%
 - ✅ Automatic segmentation (`signa.segment`): motion-energy FSM with hysteresis and dropout handling, keyless `--auto` mode in demo and tutor — push-to-sign removed as a requirement
+- ✅ Leave-one-signer-out cross-validation (`signa.crossval`): TCN 97.7% ± 1.5% top-1 over all 10 folds — the headline no longer rests on one lucky split
 - ⏳ **Next:** AUTSL access via CodaLab registration ([`docs/dataset-access.md`](docs/dataset-access.md)) — the reportable TİD numbers
 - ⏳ (Stretch) Cross-dataset generalisation: train on AUTSL, test on BosphorusSign22k
 - ⏳ (Stretch) A thin FastAPI wrapper, so the demo can become a tab in Lingua later
@@ -390,6 +407,7 @@ src/signa/
   augment.py     landmark-space augmentation
   models.py      BiLSTM baseline, Transformer encoder, TCN
   train.py       training + signer-independent evaluation
+  crossval.py    leave-one-signer-out cross-validation over train.run
   audit.py       corpus detection-rate report + prune
   report.py      per-class accuracy, confused pairs, error vs detection rate
   reject.py      temperature calibration + "not sure" reject option   (no hardware)

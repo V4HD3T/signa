@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "signa"
-version = "0.1.0"
+version = "0.1.1"
 description = "Isolated Turkish Sign Language (TID) word recognition from webcam landmarks"
 readme = "README.md"
 license = { file = "LICENSE" }
