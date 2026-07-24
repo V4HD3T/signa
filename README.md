@@ -1,6 +1,6 @@
 # Signa — Isolated Turkish Sign Language Recognition
 
-**Version:** 0.0.2 · [changelog](CHANGELOG.md)
+**Version:** 0.0.3 · [changelog](CHANGELOG.md)
 
 Signa recognises isolated Turkish Sign Language (TİD) words from a webcam. Hold
 a key, sign one word, release — the model returns its top guesses.
@@ -252,6 +252,33 @@ Run the live demo:
 python -m signa.demo --checkpoint runs/baseline-bilstm/best.pt
 ```
 
+Practise signing with the trained model as a tutor:
+
+```bash
+python -m signa.learn --checkpoint runs/lsa64-full-transformer/best.pt --labels names.json
+```
+
+## Learning mode
+
+The recogniser turned around: instead of the user signing and the model
+guessing, the app names a sign, the user performs it, and the model grades the
+attempt. That grade drives a spaced-repetition schedule (SM-2), so signs a
+learner struggles with come back soon and mastered ones recede — the pedagogy
+Lingua runs for vocabulary, here for signing, which is what makes Signa a thing
+you *use* rather than a model you evaluate.
+
+All the judgement lives in `signa.practice`, hardware-free and tested: an attempt
+grades to **correct / close / missed** (close = the right sign was in the model's
+top-k but not first — a beginner whose sign is readable but not crisp is in a
+different place from one whose sign was not read at all), an SM-2 card advances
+(1 → 6 → interval×ease days; a lapse resets and the ease factor floors at 1.3 so
+a hard sign never disappears), and the scheduler clears due backlog before
+introducing new material. Streak and daily goal are counted in the learner's
+local dates, not UTC. Progress persists to JSON between sessions.
+
+Gloss ids like `001` are not words; pass `--labels names.json` (a `{gloss: name}`
+map) to show real sign names.
+
 ## Live demo: push-to-sign
 
 The model is trained on pre-trimmed clips, so "when does a sign start and stop"
@@ -278,6 +305,7 @@ alongside the subset — the leaderboard comparison only means anything at 226.
 - ✅ Self-recording tool and push-to-sign webcam demo
 - ✅ First measured results: Transformer 97.1% / BiLSTM 88.0% top-1 on LSA64's 64 signs, signer-independent (see Results)
 - ✅ Error analysis (`signa.report`): per-class accuracy, confused pairs, and accuracy-by-detection-rate — the errors track hand detection, not just the model
+- ✅ Learning mode (`signa.learn` + `signa.practice`): SM-2 spaced repetition, grading, streaks and daily goal — pedagogy tested hardware-free
 - ⏳ **Next:** AUTSL access via CodaLab registration ([`docs/dataset-access.md`](docs/dataset-access.md)) — the reportable TİD numbers
 - ⏳ (Stretch) Cross-dataset generalisation: train on AUTSL, test on BosphorusSign22k
 - ⏳ (Stretch) A thin FastAPI wrapper, so the demo can become a tab in Lingua later
@@ -310,6 +338,8 @@ src/signa/
   audit.py       corpus detection-rate report + prune
   report.py      per-class accuracy, confused pairs, error vs detection rate
   demo.py        push-to-sign webcam demo
+  practice.py    learning-mode pedagogy: grading, SM-2, streaks   (no hardware)
+  learn.py       learning-mode webcam session (thin loop over practice + demo)
 scripts/
   run_lsa64.py   audit -> prune -> the three comparison runs
 tests/           normalisation, resampling, split, augmentation

@@ -10,6 +10,33 @@ feature that removes push-to-sign and lets the demo find sign boundaries on its
 own, which is the point Signa stops being an isolated-clip classifier and starts
 being something you can sign at continuously.
 
+## 0.0.3 — learning mode
+
+The recogniser, flipped into a tutor. Instead of the user signing and the model
+guessing, `signa.learn` names a sign, the user performs it, and the model grades
+the attempt — which then drives a spaced-repetition schedule, so signs a learner
+struggles with recur soon and mastered ones recede. This is the pedagogy Lingua
+runs for vocabulary, ported to signing, and it is the feature that makes Signa a
+thing you *use* rather than a classifier you evaluate.
+
+The pedagogy is all in `signa.practice`, with no camera and no torch: grade an
+attempt into one of correct / close / missed (close = the right sign was in the
+model's top-k but not first, a genuinely different place from unrecognised);
+advance an SM-2 card (1 → 6 → interval×ease days, a lapse resets and the ease
+factor floors at 1.3 so a hard sign never vanishes into a months-long gap);
+choose what to practise next (due backlog before new material, most-overdue
+first); count a streak and a daily goal in the learner's *local* dates, the same
+UTC-rollover lesson Lingua learned. `signa.learn` is the webcam loop around it,
+reusing the demo's checkpoint loading and classifier so training, demo, and
+tutor read landmarks identically. Progress persists to JSON between sessions.
+
+Gloss ids like `001` are not words, so `--labels names.json` maps them to real
+sign names for display; without it the raw id is shown.
+
+20 new tests pin every transition — grading buckets, SM-2 steps and lapses, the
+ease floor, scheduler priority, streak edges (yesterday still counts, a two-day
+gap does not), and the store round-trip. 51 tests total.
+
 ## 0.0.2 — what the model gets wrong, not just how often
 
 `signa.report`: per-class accuracy, the most-confused gloss pairs, and — the
