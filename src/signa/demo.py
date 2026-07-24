@@ -36,6 +36,7 @@ def load_checkpoint(path: Path, device: str):
         heads=int(saved.get("heads", 4)),
         frames=int(saved.get("frames", 48)),
         normalize=bool(saved.get("normalize", True)),
+        use_pose=str(saved.get("use_pose", True)) not in ("False", "false"),
     )
     model = models.build(cfg, len(labels))
     model.load_state_dict(blob["model_state"])
@@ -51,6 +52,11 @@ def classify(model, sequence: np.ndarray, cfg, device: str, top: int = 3,
 
     prepared = normalize(sequence) if cfg.normalize else sequence
     prepared = resample(prepared, cfg.frames)
+    if not cfg.use_pose:
+        from . import config as C
+
+        prepared = prepared.copy()
+        prepared[:, C.POSE] = 0.0
     batch = torch.from_numpy(np.ascontiguousarray(prepared)).unsqueeze(0).to(device)
     with torch.no_grad():
         # Temperature scaling (see signa.reject): divide the logits before the

@@ -165,6 +165,7 @@ def run(cfg: Config, val_signers: tuple[str, ...] | None = None) -> dict:
     summary = {
         "model": cfg.model,
         "glosses": len(glosses),
+        "use_pose": cfg.use_pose,
         "train_clips": len(train_clips),
         "val_signers": list(val_signers),
         "test_signers": list(cfg.test_signers),
@@ -207,6 +208,8 @@ def parse_args(argv=None) -> tuple[Config, str | None]:
     parser.add_argument("--layers", type=int, default=defaults.layers)
     parser.add_argument("--dropout", type=float, default=defaults.dropout)
     parser.add_argument("--no-augment", action="store_true")
+    parser.add_argument("--no-pose", action="store_true",
+                        help="ablation: hide the 8 pose points from the model (hands only)")
     parser.add_argument("--mirror", type=float, default=defaults.aug_mirror)
     parser.add_argument("--seed", type=int, default=defaults.seed)
     parser.add_argument("--tag", default=defaults.tag)
@@ -230,6 +233,7 @@ def parse_args(argv=None) -> tuple[Config, str | None]:
         layers=args.layers,
         dropout=args.dropout,
         augment=not args.no_augment,
+        use_pose=not args.no_pose,
         aug_mirror=args.mirror,
         seed=args.seed,
         tag=args.tag,

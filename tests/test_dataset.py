@@ -90,6 +90,26 @@ def test_dataset_returns_fixed_length_tensors(tmp_path):
         assert label.item() in (0, 1)
 
 
+def test_pose_ablation_zeros_only_the_pose_block(tmp_path):
+    np.save(tmp_path / "a.npy", np.stack([make_frame() for _ in range(30)]))
+    clips = [Clip("a.npy", "a", "User_1")]
+
+    full = SignDataset(clips, ["a"], Config(landmark_root=tmp_path, augment=False), train=False)
+    ablated = SignDataset(clips, ["a"],
+                          Config(landmark_root=tmp_path, augment=False, use_pose=False),
+                          train=False)
+
+    with_pose = full[0][0].numpy()
+    without_pose = ablated[0][0].numpy()
+
+    # the pose block is zeroed in the ablation and non-zero without it
+    assert np.any(with_pose[:, C.POSE] != 0.0)
+    assert np.all(without_pose[:, C.POSE] == 0.0)
+    # hands and presence flags are untouched -- normalisation still ran on pose
+    np.testing.assert_array_equal(with_pose[:, C.LEFT_HAND], without_pose[:, C.LEFT_HAND])
+    assert without_pose[0, C.LEFT_PRESENT] == 1.0
+
+
 def test_augmentation_keeps_the_shape_and_the_absent_hand_absent():
     sequence = np.stack([make_frame(left=False) for _ in range(30)])
     cfg = Config(aug_mirror=0.0)

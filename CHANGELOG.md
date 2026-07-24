@@ -10,6 +10,31 @@ feature that removes push-to-sign and lets the demo find sign boundaries on its
 own, which is the point Signa stops being an isolated-clip classifier and starts
 being something you can sign at continuously.
 
+## 0.1.4 — pose ablation: do the 8 pose points earn their place?
+
+The frame carries both hands plus 8 upper-body pose points (shoulders, elbows,
+wrists, hips), on the design bet that hand shape and trajectory hold most of the
+signal and the 468-point face mesh was not worth its dimensions. `--no-pose`
+turns that bet into a measurement.
+
+The ablation zeroes the pose block *after* normalisation — normalisation needs
+the shoulders for the origin and scale, so the hands stay position- and
+scale-normalised and the only thing removed is the pose block as an input
+feature. Paired TCN runs on the same split: **98.2% with pose, 96.6% without**.
+
+So the bet was right and also not the whole story. Hands alone already reach
+96.6%, which is why skipping the face mesh looks well-judged — but pose is a real,
+cheap **+1.6 points**, not noise. "Hands carry most of it, pose adds a little" is
+the honest reading, and it took a paired run to say either half with a number
+instead of a hunch. The full-pose run reproduced the earlier 98.2% exactly, which
+also confirms the pipeline is deterministic across sessions.
+
+`use_pose` is recorded in the checkpoint and restored on load, so an ablated model
+zeroes pose everywhere it is used — training, demo, report, calibration,
+ensemble — keeping the "train and inference read landmarks the same way"
+invariant intact. 1 new test (106 total) pins that the ablation zeroes only the
+pose block and leaves the normalised hands and presence flags untouched.
+
 ## 0.1.3 — an ensemble, and the honest verdict that it barely helps
 
 `signa.ensemble` averages the models' calibrated probabilities and asks whether

@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/V4HD3T/signa/actions/workflows/ci.yml/badge.svg)](https://github.com/V4HD3T/signa/actions/workflows/ci.yml)
 
-**Version:** 0.1.3 · [changelog](CHANGELOG.md)
+**Version:** 0.1.4 · [changelog](CHANGELOG.md)
 
 Signa recognises isolated Turkish Sign Language (TİD) words from a webcam. Sign a
 word — in `--auto` mode it finds the sign's start and end on its own — and the
@@ -89,6 +89,16 @@ of frames before the model sees anything.
 | Transformer + augmentation | 97.1% | 99.7% | 424k |
 | **TCN + augmentation** | **98.2%** | **100%** | **225k** |
 | BiLSTM, no augmentation | 88.2% | 98.1% | 699k |
+
+**Do the pose points earn their place?** The 8 upper-body points (shoulders,
+elbows, wrists, hips) sit alongside the hands as input; the design bet was that
+hand shape and trajectory carry most of the signal. The ablation (`--no-pose`,
+which zeroes the pose block *after* normalisation so the hands stay
+position-normalised) measures it: the TCN drops from 98.2% to **96.6% top-1**
+without pose. So the bet was right — hands alone already reach 96.6% — but pose is
+not free either: it is a real, cheap **+1.6 points**. Both halves of that sentence
+matter, and skipping the 468-point face mesh looks well-judged next to what 8
+pose points buy.
 
 **Does combining the models help?** Only when they are comparably strong
 (`signa.ensemble`, calibrated probabilities averaged). All three together score
@@ -390,6 +400,7 @@ alongside the subset — the leaderboard comparison only means anything at 226.
 - ✅ Automatic segmentation (`signa.segment`): motion-energy FSM with hysteresis and dropout handling, keyless `--auto` mode in demo and tutor — push-to-sign removed as a requirement
 - ✅ Leave-one-signer-out cross-validation (`signa.crossval`): TCN 97.7% ± 1.5% top-1 over all 10 folds — the headline no longer rests on one lucky split
 - ✅ Model ensemble (`signa.ensemble`): calibrated soft/hard voting — the two strong models reach 98.6%, but adding the weak one hurts; a measured "barely helps"
+- ✅ Pose ablation (`--no-pose`): the 8 pose points are worth +1.6 top-1 (98.2% → 96.6%) — hands carry most of it, pose adds a real little
 - ✅ CI (`.github/workflows/ci.yml`): the 105-test suite on Python 3.11 and 3.12, every push
 - ⏳ **Next:** AUTSL access via CodaLab registration ([`docs/dataset-access.md`](docs/dataset-access.md)) — the reportable TİD numbers
 - ⏳ (Stretch) Cross-dataset generalisation: train on AUTSL, test on BosphorusSign22k

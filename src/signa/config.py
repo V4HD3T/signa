@@ -71,6 +71,7 @@ class Config:
     # Sequence shaping
     frames: int = 48  # clips are 1-3 s @ 30 fps -> 30-90 frames, resampled here
     normalize: bool = True
+    use_pose: bool = True  # False zeroes the pose block for the ablation
 
     # Model
     model: str = "bilstm"  # "bilstm" | "transformer" | "tcn"

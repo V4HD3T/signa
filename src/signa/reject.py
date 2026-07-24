@@ -212,7 +212,8 @@ def main(argv=None) -> int:
         manifest=args.manifest, landmark_root=args.landmark_root,
         max_glosses=args.max_glosses if args.max_glosses > 0 else None,
         test_signers=tuple(args.test_signers),
-        frames=saved.frames, normalize=saved.normalize, augment=False,
+        frames=saved.frames, normalize=saved.normalize, use_pose=saved.use_pose,
+        augment=False,
     )
     val_signers = tuple(args.val_signers) if args.val_signers else None
     splits = make_splits(cfg, val_signers)

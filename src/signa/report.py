@@ -61,6 +61,7 @@ def predict(checkpoint: Path, cfg: Config, val_signers, device: str):
         test_signers=cfg.test_signers,
         frames=saved.frames,
         normalize=saved.normalize,
+        use_pose=saved.use_pose,
         augment=False,
         threads=cfg.threads,
     )

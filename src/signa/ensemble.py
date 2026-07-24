@@ -81,7 +81,8 @@ def _model_probabilities(checkpoint: Path, cfg_manifest, cfg_root, test_signers,
     model, labels, saved = load_checkpoint(checkpoint, device)
     cfg = Config(manifest=cfg_manifest, landmark_root=cfg_root,
                  max_glosses=max_glosses, test_signers=test_signers,
-                 frames=saved.frames, normalize=saved.normalize, augment=False)
+                 frames=saved.frames, normalize=saved.normalize,
+                 use_pose=saved.use_pose, augment=False)
     splits = make_splits(cfg, val_signers)
     dataset = SignDataset(splits.test, labels, cfg, train=False)
     true = np.array([labels.index(c.gloss) for c in splits.test])

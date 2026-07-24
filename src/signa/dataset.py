@@ -21,6 +21,7 @@ import numpy as np
 from torch.utils.data import Dataset
 
 from . import augment
+from . import config as C
 from .config import Config
 from .landmarks import normalize, resample
 
@@ -168,6 +169,15 @@ class SignDataset(Dataset):
         if self.train and self.cfg.augment:
             sequence = augment.apply(sequence, self.cfg, self._rng)
         sequence = resample(sequence, self.cfg.frames)
+
+        if not self.cfg.use_pose:
+            # Ablation: hide the pose coordinates from the model. Zeroed *after*
+            # normalisation, which needs the shoulders, so the hands are still
+            # position- and scale-normalised -- the only thing removed is the
+            # pose block as an input feature. The presence flags stay; they are
+            # about the hands.
+            sequence = sequence.copy()
+            sequence[:, C.POSE] = 0.0
 
         return (
             torch.from_numpy(np.ascontiguousarray(sequence)),
