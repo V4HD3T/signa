@@ -1,6 +1,6 @@
 # Signa — Isolated Turkish Sign Language Recognition
 
-**Version:** 0.0.3 · [changelog](CHANGELOG.md)
+**Version:** 0.0.4 · [changelog](CHANGELOG.md)
 
 Signa recognises isolated Turkish Sign Language (TİD) words from a webcam. Hold
 a key, sign one word, release — the model returns its top guesses.
@@ -246,6 +246,14 @@ python -m signa.report --checkpoint runs/lsa64-full-transformer/best.pt \
     --test-signers 009 010 --val-signers 007 008 --csv confusion.csv
 ```
 
+Calibrate a "not sure" reject option (writes a sidecar the demo and tutor use):
+
+```bash
+python -m signa.reject --checkpoint runs/lsa64-full-transformer/best.pt \
+    --manifest data/manifest_train_full.csv --landmark-root data/landmarks_lsa64 \
+    --test-signers 009 010 --val-signers 007 008 --target-accuracy 0.99 --write
+```
+
 Run the live demo:
 
 ```bash
@@ -257,6 +265,31 @@ Practise signing with the trained model as a tutor:
 ```bash
 python -m signa.learn --checkpoint runs/lsa64-full-transformer/best.pt --labels names.json
 ```
+
+## Knowing when to say nothing
+
+A softmax over 64 classes always sums to one, so *something* always wins — even
+for a fumble, noise, or a sign the model was never taught. `signa.reject` lets it
+decline, in two measured steps:
+
+**Calibrate.** Temperature scaling (Guo et al. 2017) fits one scalar T on the
+validation signers to make the reported confidence honest — it cannot change
+which sign wins, only how confident the model sounds. On the LSA64 Transformer
+T fitted to 0.775 (below 1: this model was mildly *under*confident, the opposite
+of the usual case, which is why it is fitted and not assumed).
+
+**Reject.** Below a confidence threshold — chosen on validation for a target
+accuracy among accepted signs, not a guessed 0.5 — the prediction is withheld as
+"not sure". On the test signers, rejecting the least-confident 5.3% of signs
+lifts accuracy on the rest from 97.1% to 98.5%. The withheld signs are
+disproportionately the ones the model would have got wrong, consistent with the
+detection-rate finding above.
+
+Calibration is fitted on validation and reported on test — the same discipline
+as the split, so the reject option is never tuned on the data it is judged on. It
+writes a sidecar next to the checkpoint; the demo shows "not sure" below the
+threshold, and learning mode treats an unreadable attempt as "try again" rather
+than scoring it as a forgotten sign.
 
 ## Learning mode
 
@@ -306,6 +339,7 @@ alongside the subset — the leaderboard comparison only means anything at 226.
 - ✅ First measured results: Transformer 97.1% / BiLSTM 88.0% top-1 on LSA64's 64 signs, signer-independent (see Results)
 - ✅ Error analysis (`signa.report`): per-class accuracy, confused pairs, and accuracy-by-detection-rate — the errors track hand detection, not just the model
 - ✅ Learning mode (`signa.learn` + `signa.practice`): SM-2 spaced repetition, grading, streaks and daily goal — pedagogy tested hardware-free
+- ✅ Calibrated reject option (`signa.reject`): temperature scaling + a validation-chosen threshold — rejecting 5.3% of signs lifts accuracy on the rest from 97.1% to 98.5%
 - ⏳ **Next:** AUTSL access via CodaLab registration ([`docs/dataset-access.md`](docs/dataset-access.md)) — the reportable TİD numbers
 - ⏳ (Stretch) Cross-dataset generalisation: train on AUTSL, test on BosphorusSign22k
 - ⏳ (Stretch) A thin FastAPI wrapper, so the demo can become a tab in Lingua later
@@ -337,6 +371,7 @@ src/signa/
   train.py       training + signer-independent evaluation
   audit.py       corpus detection-rate report + prune
   report.py      per-class accuracy, confused pairs, error vs detection rate
+  reject.py      temperature calibration + "not sure" reject option   (no hardware)
   demo.py        push-to-sign webcam demo
   practice.py    learning-mode pedagogy: grading, SM-2, streaks   (no hardware)
   learn.py       learning-mode webcam session (thin loop over practice + demo)

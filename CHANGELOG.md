@@ -10,6 +10,41 @@ feature that removes push-to-sign and lets the demo find sign boundaries on its
 own, which is the point Signa stops being an isolated-clip classifier and starts
 being something you can sign at continuously.
 
+## 0.0.4 — "I don't know" (calibrated reject option)
+
+The demo and learning mode always returned a top-1, even for a fumble, noise, or
+a sign outside the vocabulary — a softmax over 64 classes always sums to one, so
+something always wins, and a neural net's softmax makes the winner look
+reassuring even when it is wrong. `signa.reject` lets the model decline.
+
+Two honest steps, both in numpy and tested without a model:
+
+- **Temperature scaling** (Guo et al. 2017): one scalar T, fitted on the
+  validation signers by minimising NLL, divides the logits before the softmax so
+  the reported confidence is calibrated. It cannot change which sign wins, only
+  how confident the model is allowed to sound. On the LSA64 Transformer T fitted
+  to 0.775 — below 1, meaning this model was mildly *under*confident and gets
+  sharpened, the opposite of the usual overconfidence, which is exactly why it is
+  fitted rather than assumed.
+- **A reject threshold** chosen on validation for a target accuracy among
+  accepted signs — a measured cutoff, not a guessed 0.5. On the test signers,
+  rejecting the least-confident 5.3% of signs lifts accuracy on the rest from
+  97.1% to 98.5%; the withheld signs get an honest "not sure". The full
+  risk-coverage trade (accuracy vs how many signs are accepted) is printed,
+  because a reject option is only honest if you also say how often it fires.
+
+Calibration writes a sidecar next to the checkpoint (`best.calib.json`); the demo
+shows "not sure" below the threshold, and learning mode treats a rejected read as
+"couldn't read that, try again" **without** advancing the schedule — the model
+failing to read a sign is not evidence the learner forgot it, so it must not be
+scored as a lapse. Fitting on validation and reporting on test is the same
+discipline as the split: the reject option is never tuned on the data it is
+judged against.
+
+10 new tests (71 total): stable temperature softmax, NLL, temperature fitting
+recovering a planted overconfidence, the accept/reject boundary with a margin
+option, risk-coverage arithmetic, and threshold selection with its fallback.
+
 ## 0.0.3 — learning mode
 
 The recogniser, flipped into a tutor. Instead of the user signing and the model

@@ -35,7 +35,7 @@ def display_name(gloss: str, names: dict[str, str]) -> str:
 
 
 def run_session(model, labels, cfg, store_path, names, *, device, camera, min_frames,
-                today=None):
+                temperature=1.0, reject_threshold=0.0, today=None):
     import cv2
 
     from .landmarks import Extractor
@@ -104,12 +104,20 @@ def run_session(model, labels, cfg, store_path, names, *, device, camera, min_fr
                         banner, detail = "too short, try again", ""
                         continue
                     ranked = [(labels[i], p)
-                              for i, p in classify(model, np.stack(buffer), cfg, device)]
-                    attempt = practice.grade(target, ranked)
-                    progress.record(target, attempt.quality, today)
-                    practice.save(progress, store_path)
-                    banner, detail = _feedback(attempt, names)
-                    target, is_new = practice.next_gloss(progress, vocabulary, today)
+                              for i, p in classify(model, np.stack(buffer), cfg, device,
+                                                   temperature=temperature)]
+                    # A rejected read -- the model is not confident enough to
+                    # judge -- is not evidence the learner forgot the sign, so it
+                    # does not advance the schedule. The same sign is offered
+                    # again rather than scored as a lapse.
+                    if ranked and ranked[0][1] < reject_threshold:
+                        banner, detail = "couldn't read that", "try again, more clearly"
+                    else:
+                        attempt = practice.grade(target, ranked)
+                        progress.record(target, attempt.quality, today)
+                        practice.save(progress, store_path)
+                        banner, detail = _feedback(attempt, names)
+                        target, is_new = practice.next_gloss(progress, vocabulary, today)
         finally:
             capture.release()
             cv2.destroyAllWindows()
@@ -141,12 +149,20 @@ def main(argv=None) -> int:
     parser.add_argument("--min-frames", type=int, default=10)
     args = parser.parse_args(argv)
 
+    from .reject import load_calibration
+
     model, labels, cfg = load_checkpoint(args.checkpoint, args.device)
     names = json.loads(args.labels.read_text(encoding="utf-8")) if args.labels else {}
-    print(f"{len(labels)} signs loaded; progress at {args.progress}")
+    calibration = load_calibration(args.checkpoint)
+    temperature = calibration["temperature"] if calibration else 1.0
+    threshold = calibration["threshold"] if calibration else 0.0
+    print(f"{len(labels)} signs loaded; progress at {args.progress}"
+          + (f"; calibrated (T={temperature}, reject below {threshold:.0%})"
+             if calibration else "; no calibration"))
 
     return run_session(model, labels, cfg, args.progress, names,
-                       device=args.device, camera=args.camera, min_frames=args.min_frames)
+                       device=args.device, camera=args.camera, min_frames=args.min_frames,
+                       temperature=temperature, reject_threshold=threshold)
 
 
 if __name__ == "__main__":
