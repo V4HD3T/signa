@@ -10,6 +10,35 @@ feature that removes push-to-sign and lets the demo find sign boundaries on its
 own, which is the point Signa stops being an isolated-clip classifier and starts
 being something you can sign at continuously.
 
+## 0.1.3 — an ensemble, and the honest verdict that it barely helps
+
+`signa.ensemble` averages the models' calibrated probabilities and asks whether
+the whole beats its best part. The standard hope is that where one model is wrong
+another is right — but that only pays off if the models fail on *different* clips,
+and this project already had a reason to doubt it: the error tracks hand-detection
+rate (0.0.2), and a clip MediaPipe barely saw is hard for every architecture at
+once. So the feature exists to *measure* the hope, not assume it.
+
+The measurement, on the LSA64 test signers:
+
+- All three models (BiLSTM + Transformer + TCN): **97.3%** top-1 — *below* the
+  TCN's 98.2% alone. The BiLSTM at 88% drags the average down; a weak member is a
+  liability, not insurance.
+- The two strong models (Transformer + TCN): **98.6%**, a slim **+0.3%** over the
+  TCN. Real, but small — the three fail largely on the same low-detection clips,
+  so there is little independent error for averaging to cancel.
+
+The honest headline is that ensembling is not free accuracy here: it helps a
+little if you drop the weak member and hurts if you keep it. That is a more useful
+sentence in a write-up than a bare "we ensembled and got 98.6%", because it says
+*why*, and the why ties back to the detection-rate finding three versions ago.
+
+Probabilities are calibrated per model (each checkpoint's temperature) before
+averaging, so a model is not over-weighted just for being overconfident. Soft mean
+and hard majority vote are both reported. The combination logic is pure and tested
+(7 new tests, 105 total); model loading reuses the demo's and the split is
+reconstructed exactly as the report and calibration do it.
+
 ## 0.1.2 — CI: the test suite runs on every push
 
 The 98 tests were only ever a promise if you remembered to run them. A GitHub

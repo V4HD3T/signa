@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/V4HD3T/signa/actions/workflows/ci.yml/badge.svg)](https://github.com/V4HD3T/signa/actions/workflows/ci.yml)
 
-**Version:** 0.1.2 · [changelog](CHANGELOG.md)
+**Version:** 0.1.3 · [changelog](CHANGELOG.md)
 
 Signa recognises isolated Turkish Sign Language (TİD) words from a webcam. Sign a
 word — in `--auto` mode it finds the sign's start and end on its own — and the
@@ -89,6 +89,15 @@ of frames before the model sees anything.
 | Transformer + augmentation | 97.1% | 99.7% | 424k |
 | **TCN + augmentation** | **98.2%** | **100%** | **225k** |
 | BiLSTM, no augmentation | 88.2% | 98.1% | 699k |
+
+**Does combining the models help?** Only when they are comparably strong
+(`signa.ensemble`, calibrated probabilities averaged). All three together score
+97.3% — *below* the TCN's 98.2%, because the BiLSTM at 88% drags the average down.
+The two strong models alone (TCN + Transformer) reach 98.6%, a slim +0.3% over the
+TCN. The gain is real but small, which fits the earlier finding: the three fail
+largely on the same low-detection clips, so there is only so much independent
+error for averaging to cancel. Ensembling is not free accuracy here — it helps a
+little if you drop the weak member, and hurts if you keep it.
 
 **Is that one number a lucky split?** Leave-one-signer-out cross-validation
 (`signa.crossval`) answers it: hold out each of the 10 signers in turn, train on
@@ -380,6 +389,8 @@ alongside the subset — the leaderboard comparison only means anything at 226.
 - ✅ Calibrated reject option (`signa.reject`): temperature scaling + a validation-chosen threshold — rejecting 5.3% of signs lifts accuracy on the rest from 97.1% to 98.5%
 - ✅ Automatic segmentation (`signa.segment`): motion-energy FSM with hysteresis and dropout handling, keyless `--auto` mode in demo and tutor — push-to-sign removed as a requirement
 - ✅ Leave-one-signer-out cross-validation (`signa.crossval`): TCN 97.7% ± 1.5% top-1 over all 10 folds — the headline no longer rests on one lucky split
+- ✅ Model ensemble (`signa.ensemble`): calibrated soft/hard voting — the two strong models reach 98.6%, but adding the weak one hurts; a measured "barely helps"
+- ✅ CI (`.github/workflows/ci.yml`): the 105-test suite on Python 3.11 and 3.12, every push
 - ⏳ **Next:** AUTSL access via CodaLab registration ([`docs/dataset-access.md`](docs/dataset-access.md)) — the reportable TİD numbers
 - ⏳ (Stretch) Cross-dataset generalisation: train on AUTSL, test on BosphorusSign22k
 - ⏳ (Stretch) A thin FastAPI wrapper, so the demo can become a tab in Lingua later
@@ -413,6 +424,7 @@ src/signa/
   audit.py       corpus detection-rate report + prune
   report.py      per-class accuracy, confused pairs, error vs detection rate
   reject.py      temperature calibration + "not sure" reject option   (no hardware)
+  ensemble.py    combine models: calibrated soft/hard voting   (no hardware)
   segment.py     motion-energy segmentation FSM + frame buffer   (no hardware)
   demo.py        webcam demo: push-to-sign, or --auto continuous
   practice.py    learning-mode pedagogy: grading, SM-2, streaks   (no hardware)
