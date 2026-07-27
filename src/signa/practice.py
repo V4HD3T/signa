@@ -15,7 +15,7 @@ anything whose correctness matters is exercised without hardware.
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -206,15 +206,54 @@ def next_gloss(progress: Progress, vocabulary: list[str], today: date):
 # --- Persistence ----------------------------------------------------------
 
 
+def _card_from(raw) -> Card | None:
+    """Build a Card from stored JSON, ignoring anything it does not recognise.
+
+    Fields the schema has since dropped are skipped and fields it has since
+    gained fall back to their defaults, so a progress file written by an older
+    (or newer) version still loads. `Card(**raw)` would raise TypeError on either,
+    and a learner whose file is one field out of date should not be locked out of
+    their own history."""
+    if not isinstance(raw, dict):
+        return None
+    known = {f.name for f in fields(Card)}
+    try:
+        return Card(**{k: v for k, v in raw.items() if k in known})
+    except (TypeError, ValueError):
+        return None
+
+
 def load(path: str | Path) -> Progress:
+    """Read a progress file, salvaging what is readable.
+
+    Practice history is the user's own record and there is no second copy, so a
+    malformed file degrades rather than crashes: an unreadable file starts a
+    fresh Progress, and a file with some bad cards keeps the good ones. Losing
+    one sign's schedule is recoverable; losing the session to a traceback, or
+    silently overwriting the file with an empty one, is not."""
     file = Path(path)
     if not file.exists():
         return Progress()
-    raw = json.loads(file.read_text(encoding="utf-8"))
-    cards = {g: Card(**c) for g, c in raw.get("cards", {}).items()}
-    return Progress(cards=cards,
-                    days=raw.get("days", []),
-                    daily_goal=raw.get("daily_goal", 15))
+
+    try:
+        raw = json.loads(file.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError, OSError):
+        return Progress()
+    if not isinstance(raw, dict):
+        return Progress()
+
+    cards = {}
+    for gloss, stored in (raw.get("cards") or {}).items():
+        card = _card_from(stored)
+        if card is not None:
+            cards[gloss] = card
+
+    days = [d for d in (raw.get("days") or []) if isinstance(d, str)]
+    goal = raw.get("daily_goal", 15)
+    if not isinstance(goal, int) or goal < 1:
+        goal = 15
+
+    return Progress(cards=cards, days=sorted(set(days)), daily_goal=goal)
 
 
 def save(progress: Progress, path: str | Path) -> None:

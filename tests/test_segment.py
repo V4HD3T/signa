@@ -128,6 +128,19 @@ def test_exit_above_enter_is_rejected():
         Segmenter(enter=0.03, exit=0.06)
 
 
+def test_a_segmenter_that_could_never_emit_is_rejected():
+    # min > max can never produce a segment. Failing by silently returning
+    # nothing is the worst outcome: the demo just stops recognising, with no
+    # error to explain why.
+    with pytest.raises(ValueError, match="no segment could ever be emitted"):
+        Segmenter(enter=ENTER, exit=EXIT, min_frames=100, max_frames=20)
+
+
+def test_zero_end_patience_is_rejected():
+    with pytest.raises(ValueError, match="end_patience"):
+        Segmenter(enter=ENTER, exit=EXIT, end_patience=0)
+
+
 def test_push_returns_the_segment_exactly_when_it_closes():
     s = Segmenter(enter=ENTER, exit=EXIT, end_patience=3, min_frames=5)
     results = [s.push(v) for v in stream((0.10, 10), (0.0, 3))]

@@ -10,6 +10,28 @@ feature that removes push-to-sign and lets the demo find sign boundaries on its
 own, which is the point Signa stops being an isolated-clip classifier and starts
 being something you can sign at continuously.
 
+## 0.1.7 — two ways the app could fail badly at the user's expense
+
+**A progress file one field out of date locked the learner out.** `practice.load`
+built each card with `Card(**stored)`, which raises `TypeError` on any field the
+schema has since gained or dropped — so a file written by a different version, or
+edited by hand, crashed learning mode on startup. Practice history is the user's
+own record and there is no second copy, so it now degrades instead: unreadable
+JSON starts fresh, unknown fields are ignored, missing ones fall back to
+defaults, and one bad card no longer takes the good ones with it. Losing a single
+sign's schedule is recoverable; losing the session to a traceback is not, and
+silently overwriting the file with an empty one would be worse than either.
+
+**A misconfigured segmenter failed by doing nothing.** `min_frames > max_frames`
+makes emitting a segment impossible, and the old code accepted it and simply
+never recognised anything — the worst failure mode available, because the demo
+looks like it is working and there is no error to explain the silence. That, and
+`end_patience < 1`, now raise at construction, alongside the hysteresis check
+that was already there.
+
+7 new tests (122 total) covering corrupt JSON, unknown and missing card fields,
+a partially-bad file, a nonsense daily goal, and both new configuration errors.
+
 ## 0.1.6 — loading a checkpoint can no longer execute code
 
 A `.pt` file is a pickle, and unpickling arbitrary data runs arbitrary code.

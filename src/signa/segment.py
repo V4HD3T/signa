@@ -92,6 +92,16 @@ class Segmenter:
                  max_frames: int = MAX_FRAMES):
         if exit > enter:
             raise ValueError("exit threshold must be <= enter (hysteresis)")
+        # A segmenter that can never emit anything is a configuration mistake,
+        # and one that fails by returning nothing is the worst kind: the demo
+        # simply stops recognising, with no error to explain why. Say so instead.
+        if min_frames > max_frames:
+            raise ValueError(
+                f"min_frames ({min_frames}) exceeds max_frames ({max_frames}); "
+                "no segment could ever be emitted"
+            )
+        if end_patience < 1:
+            raise ValueError("end_patience must be at least 1 frame")
         self.enter = enter
         self.exit = exit
         self.end_patience = end_patience

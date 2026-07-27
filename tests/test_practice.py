@@ -6,6 +6,7 @@ or an off-by-one streak is the kind of bug that silently degrades a learner's
 experience without ever raising an error.
 """
 
+import json
 from datetime import date, timedelta
 
 from signa import practice
@@ -169,3 +170,50 @@ def test_progress_round_trips_through_disk(tmp_path):
 def test_loading_a_missing_file_is_an_empty_progress(tmp_path):
     loaded = practice.load(tmp_path / "nope.json")
     assert loaded.cards == {} and loaded.streak(date(2026, 7, 24)) == 0
+
+
+# --- Corrupt / outdated progress files ------------------------------------
+#
+# Practice history is the learner's own record with no second copy, so a
+# malformed file must degrade rather than crash or silently reset.
+
+def test_unparseable_json_starts_fresh_instead_of_crashing(tmp_path):
+    path = tmp_path / "progress.json"
+    path.write_text("{not json at all", encoding="utf-8")
+    assert practice.load(path).cards == {}
+
+
+def test_a_card_with_an_unknown_field_still_loads(tmp_path):
+    # A field written by a newer version must not lock the learner out.
+    path = tmp_path / "progress.json"
+    path.write_text(json.dumps({"cards": {
+        "merhaba": {"reps": 2, "ease": 2.5, "interval": 6, "due": "2026-08-01",
+                    "seen": 3, "correct": 2, "future_field": "???"}}}), encoding="utf-8")
+
+    card = practice.load(path).cards["merhaba"]
+    assert card.reps == 2 and card.interval == 6
+
+
+def test_a_card_missing_fields_falls_back_to_defaults(tmp_path):
+    path = tmp_path / "progress.json"
+    path.write_text(json.dumps({"cards": {"a": {"reps": 1}}}), encoding="utf-8")
+
+    card = practice.load(path).cards["a"]
+    assert card.reps == 1 and card.ease == 2.5  # default preserved
+
+
+def test_one_unreadable_card_does_not_lose_the_others(tmp_path):
+    path = tmp_path / "progress.json"
+    path.write_text(json.dumps({"cards": {
+        "good": {"reps": 3, "interval": 15},
+        "broken": "this should be an object",
+    }}), encoding="utf-8")
+
+    cards = practice.load(path).cards
+    assert "good" in cards and "broken" not in cards
+
+
+def test_a_nonsense_daily_goal_falls_back(tmp_path):
+    path = tmp_path / "progress.json"
+    path.write_text(json.dumps({"daily_goal": -5}), encoding="utf-8")
+    assert practice.load(path).daily_goal == 15
