@@ -112,6 +112,37 @@ def test_choose_threshold_takes_the_most_coverage_meeting_target():
     assert (probs.argmax(axis=-1)[accepted] == true[accepted]).all()
 
 
+def test_a_malformed_sidecar_reads_as_no_calibration(tmp_path):
+    # The demo and tutor both work uncalibrated, so a broken sidecar should cost
+    # the reject option, not the session.
+    from signa.reject import load_calibration, sidecar_path
+
+    checkpoint = tmp_path / "best.pt"
+    sidecar_path(checkpoint).write_text("{ broken", encoding="utf-8")
+    assert load_calibration(checkpoint) is None
+
+
+def test_a_sidecar_missing_its_fields_reads_as_no_calibration(tmp_path):
+    import json as _json
+
+    from signa.reject import load_calibration, sidecar_path
+
+    checkpoint = tmp_path / "best.pt"
+    sidecar_path(checkpoint).write_text(_json.dumps({"note": "hi"}), encoding="utf-8")
+    assert load_calibration(checkpoint) is None
+
+
+def test_a_valid_sidecar_loads(tmp_path):
+    import json as _json
+
+    from signa.reject import load_calibration, sidecar_path
+
+    checkpoint = tmp_path / "best.pt"
+    sidecar_path(checkpoint).write_text(
+        _json.dumps({"temperature": 0.8, "threshold": 0.9}), encoding="utf-8")
+    assert load_calibration(checkpoint)["temperature"] == 0.8
+
+
 def test_choose_threshold_falls_back_to_best_accuracy_when_target_unreachable():
     # No threshold reaches 100% here except one that also keeps a wrong clip;
     # the fallback returns a real threshold rather than crashing.

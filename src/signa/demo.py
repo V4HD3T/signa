@@ -18,6 +18,15 @@ from pathlib import Path
 
 import numpy as np
 
+from . import config as C
+from .landmarks import normalize, resample
+
+# NOTE: cv2, mediapipe and torch are imported *inside* the functions that need
+# them, not here. That is deliberate and load-bearing: the whole test suite runs
+# without a camera or MediaPipe installed, and CI installs neither. Do not hoist
+# those to module level while tidying -- `from .landmarks import Extractor` in
+# particular pulls MediaPipe and would break collection.
+
 
 def load_checkpoint(path: Path, device: str):
     import torch
@@ -54,13 +63,9 @@ def classify(model, sequence: np.ndarray, cfg, device: str, top: int = 3,
              temperature: float = 1.0):
     import torch
 
-    from .landmarks import normalize, resample
-
     prepared = normalize(sequence) if cfg.normalize else sequence
     prepared = resample(prepared, cfg.frames)
     if not cfg.use_pose:
-        from . import config as C
-
         prepared = prepared.copy()
         prepared[:, C.POSE] = 0.0
     batch = torch.from_numpy(np.ascontiguousarray(prepared)).unsqueeze(0).to(device)
@@ -79,7 +84,6 @@ def _auto_loop(capture, extractor, model, labels, cfg, *, device, temperature,
     was standing in for until segmentation existed."""
     import cv2
 
-    from .landmarks import normalize
     from .segment import FrameStream, Segmenter
 
     segmenter = Segmenter(enter=enter, exit=exit)

@@ -47,6 +47,25 @@ def test_model_tolerates_a_variable_clip_length(name):
     assert model(torch.randn(1, 64, FRAME_DIM)).shape == (1, 8)
 
 
+def test_importing_the_package_pulls_in_neither_cv2_nor_mediapipe():
+    """The lazy imports in demo/learn/landmarks are load-bearing.
+
+    The suite and CI run without a camera or MediaPipe installed, so every
+    hardware import lives inside the function that needs it. This fails the
+    moment someone hoists one to module level while tidying -- which is exactly
+    the tidy-up that looks harmless."""
+    import sys
+
+    import signa.demo  # noqa: F401
+    import signa.landmarks  # noqa: F401
+    import signa.learn  # noqa: F401
+    import signa.reject  # noqa: F401
+    import signa.segment  # noqa: F401
+
+    assert "cv2" not in sys.modules
+    assert "mediapipe" not in sys.modules
+
+
 def test_unknown_model_is_rejected():
     with pytest.raises(ValueError, match="unknown model"):
         models.build(Config(model="lstm-typo"), num_classes=3)

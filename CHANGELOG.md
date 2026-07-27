@@ -10,6 +10,33 @@ feature that removes push-to-sign and lets the demo find sign boundaries on its
 own, which is the point Signa stops being an isolated-clip classifier and starts
 being something you can sign at continuously.
 
+## 0.1.8 — tidy the imports, and write down which ones must stay untidy
+
+Function-level imports had accumulated: `json` imported twice inside two
+functions in `reject`, `Path` imported inside a one-line helper, `config` and
+`landmarks` imported inside `demo.classify`, a `normalize` import left behind
+after a refactor. All hoisted to module level where they belong.
+
+The more useful half of this change is the comment explaining the ones that
+stayed. `cv2`, `mediapipe` and `torch` are imported *inside* the functions that
+need them, and that is load-bearing, not laziness: the entire test suite runs
+without a camera or MediaPipe installed and CI installs neither, so hoisting
+`from .landmarks import Extractor` to module level would break collection
+outright. Undocumented, that pattern reads as sloppiness and invites exactly the
+"cleanup" that breaks it — so `demo.py` now says so at the top, and a test
+asserts that importing the modules pulls in neither cv2 nor mediapipe.
+
+`load_calibration` also stopped trusting its input: a malformed or incomplete
+sidecar now reads as "no calibration" rather than raising, since the demo and
+tutor both work uncalibrated and a broken file should cost the reject option, not
+the session.
+
+`torch` is upper-bounded (`>=2.2,<3`) like every other dependency — a major
+release can change serialisation, and this project loads checkpoints written by
+earlier runs.
+
+4 new tests (126 total).
+
 ## 0.1.7 — two ways the app could fail badly at the user's expense
 
 **A progress file one field out of date locked the learner out.** `practice.load`

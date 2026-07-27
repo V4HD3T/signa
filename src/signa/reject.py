@@ -26,7 +26,13 @@ honest if you also say how often it fires.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import numpy as np
+
+# torch and the model-loading modules are imported inside the CLI below, not
+# here, so the calibration maths stays importable without them.
 
 
 def softmax(logits: np.ndarray, temperature: float = 1.0) -> np.ndarray:
@@ -155,20 +161,30 @@ def choose_threshold(probs: np.ndarray, true: np.ndarray, target_accuracy: float
 # it is judged against.
 
 
-def sidecar_path(checkpoint) -> "Path":
-    from pathlib import Path
-
-    checkpoint = Path(checkpoint)
-    return checkpoint.with_suffix(".calib.json")
+def sidecar_path(checkpoint) -> Path:
+    return Path(checkpoint).with_suffix(".calib.json")
 
 
 def load_calibration(checkpoint) -> dict | None:
-    import json
+    """The stored temperature and threshold for a checkpoint, or None.
 
+    A malformed sidecar reads as "no calibration" rather than raising: the demo
+    and tutor both work uncalibrated, so a broken file should cost the reject
+    option, not the session."""
     path = sidecar_path(checkpoint)
     if not path.exists():
         return None
-    return json.loads(path.read_text(encoding="utf-8"))
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError, OSError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    if not isinstance(payload.get("temperature"), (int, float)):
+        return None
+    if not isinstance(payload.get("threshold"), (int, float)):
+        return None
+    return payload
 
 
 def _collect_logits(model, dataset, device: str):
@@ -186,8 +202,6 @@ def _collect_logits(model, dataset, device: str):
 
 def main(argv=None) -> int:
     import argparse
-    import json
-    from pathlib import Path
 
     from .config import Config
     from .dataset import SignDataset, make_splits

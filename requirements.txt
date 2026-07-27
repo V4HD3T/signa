@@ -9,7 +9,9 @@ mediapipe==0.10.14
 opencv-python>=4.9,<5
 numpy>=1.26,<2
 
-torch>=2.2
+# Upper-bounded like the rest: a major release can change serialisation and
+# module defaults, and this project loads checkpoints written by earlier runs.
+torch>=2.2,<3
 # torch on Windows without CUDA is the default wheel; for a GPU build see
 # https://pytorch.org/get-started/locally/
 
