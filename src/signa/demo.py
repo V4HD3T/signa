@@ -25,7 +25,13 @@ def load_checkpoint(path: Path, device: str):
     from . import models
     from .config import Config
 
-    blob = torch.load(path, map_location=device, weights_only=False)
+    # weights_only=True: a .pt file is a pickle, and unpickling arbitrary data
+    # executes arbitrary code. This is the one door every checkpoint comes
+    # through -- a shared or downloaded model would otherwise own the machine
+    # that opens it. Everything stored here is tensors, lists, strings and
+    # numbers, so the restricted unpickler is sufficient; if a future checkpoint
+    # needs a custom class, allowlist it rather than reopening this.
+    blob = torch.load(path, map_location=device, weights_only=True)
     labels = blob["labels"]
     saved = blob.get("config", {})
     cfg = Config(

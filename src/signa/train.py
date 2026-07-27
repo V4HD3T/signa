@@ -159,7 +159,9 @@ def run(cfg: Config, val_signers: tuple[str, ...] | None = None) -> dict:
             print(f"early stop at epoch {epoch} (best was {best['epoch']})")
             break
 
-    model.load_state_dict(torch.load(out_dir / "best.pt", map_location=device)["model_state"])
+    model.load_state_dict(
+        torch.load(out_dir / "best.pt", map_location=device, weights_only=True)["model_state"]
+    )
     test = evaluate(model, loaders["test"], device)
 
     summary = {

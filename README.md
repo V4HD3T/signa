@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/V4HD3T/signa/actions/workflows/ci.yml/badge.svg)](https://github.com/V4HD3T/signa/actions/workflows/ci.yml)
 
-**Version:** 0.1.5 · [changelog](CHANGELOG.md)
+**Version:** 0.1.6 · [changelog](CHANGELOG.md)
 
 Signa recognises isolated Turkish Sign Language (TİD) words from a webcam. Sign a
 word — in `--auto` mode it finds the sign's start and end on its own — and the

@@ -10,6 +10,28 @@ feature that removes push-to-sign and lets the demo find sign boundaries on its
 own, which is the point Signa stops being an isolated-clip classifier and starts
 being something you can sign at continuously.
 
+## 0.1.6 — loading a checkpoint can no longer execute code
+
+A `.pt` file is a pickle, and unpickling arbitrary data runs arbitrary code.
+`load_checkpoint` passed `weights_only=False`, so opening someone else's
+checkpoint would have executed whatever it contained — and "try my trained
+model" is a normal sentence in this field, on a public repository. Both load
+sites (`demo.load_checkpoint` and the best-model reload at the end of training)
+now pass `weights_only=True`.
+
+Nothing had to be given up for it: everything these checkpoints store is tensors,
+lists, strings and numbers, and the existing 64-gloss models load unchanged
+through the restricted unpickler. If a future checkpoint ever needs a custom
+class, the fix is to allowlist that class, not to reopen this.
+
+Three tests pin it, including the counterexample that makes the other two mean
+something: a crafted checkpoint whose payload runs under an unrestricted load is
+refused under ours, with the payload never executing. Writing that test taught me
+something worth recording — the payload fires *during* unpickling, before torch
+validates the file, so "we check the file first" would not have been a defence.
+
+115 tests total.
+
 ## 0.1.5 — one table for every run
 
 The numbers quoted through the README were copied there by hand from scattered
